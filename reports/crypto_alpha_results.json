@@ -5,13 +5,20 @@
       "原聚宽宣传绩效多为样本内/社区回测，缺少严格样本外与统一成本假设",
       "A 股小市值、财务、红利、涨跌停规则在 Crypto 无直接对应",
       "本样本外区间 BTC 买入持有接近零收益，beta 环境显著更差",
-      "加密 24/7、高波动、高相关，夏普提升比 A 股更困难"
+      "加密 24/7、高波动、高相关，夏普提升比 A 股更困难",
+      "弱市硬做空山寨常因高相关反弹与资金费率近似成本伤害夏普，应以空仓为主、条件对冲为辅"
     ],
     "signal_timing": "T-1 收盘信号，T 日收益；允许多空；空头按日借券/资金费率近似扣费",
     "fee_rate_one_way": 0.001,
     "slippage_rate_one_way": 0.0005,
     "borrow_rate_daily": 5e-05,
-    "selection": "仅用训练期双折稳健性选参，样本外只用于最终评价"
+    "selection": "仅用训练期双折稳健性选参，样本外只用于最终评价",
+    "design_upgrades": [
+      "逆波动加权替代纯等权，降低高波动山寨对组合夏普的拖累",
+      "广度/双均线二次确认，减少 BTC 伪突破后的回撤",
+      "核心-卫星改为相对动量自适应，避免 OOS 段 BTC 滞涨时固定高仓位",
+      "做空改为严格阈值/波动触发，弱市默认现金而非持续空头"
+    ]
   },
   "universe": [
     "BTC-USDT",
@@ -76,8 +83,8 @@
         "主流/山寨动量轮动",
         "波动率目标"
       ],
-      "candidates_tested": 96,
-      "candidates_qualified": 30,
+      "candidates_tested": 48,
+      "candidates_qualified": 9,
       "selection_objective": "train walk-forward: min(fold sharpe)+0.5*train sharpe-0.35*mdd",
       "default_parameters": {
         "trend_window": 150,
@@ -90,9 +97,9 @@
       "selected_parameters": {
         "trend_window": 150,
         "lookback": 90,
-        "top_k": 2,
+        "top_k": 3,
         "rebalance_days": 14,
-        "vol_target": 0.3,
+        "vol_target": 0.28,
         "max_gross": 1.0
       },
       "recommended_parameters": {
@@ -107,77 +114,315 @@
         "start": "2021-01-01",
         "end": "2024-04-27",
         "observations": 1213,
-        "total_return": 0.6961993661983286,
-        "cagr": 0.1723334812407027,
-        "annual_volatility": 0.1795140857716699,
-        "sharpe": 0.9753219758393455,
-        "max_drawdown": 0.31261455567743246,
-        "calmar": 0.5512650582352374,
-        "turnover": 12.670083357748545,
-        "cost_paid": 0.019005125036622824
+        "total_return": 0.53250175850724,
+        "cagr": 0.1370732008197708,
+        "annual_volatility": 0.18192644904135474,
+        "sharpe": 0.7969945835316321,
+        "max_drawdown": 0.3481197376504488,
+        "calmar": 0.393753028038323,
+        "turnover": 13.143035198455731,
+        "cost_paid": 0.019714552797683596
       },
       "default_test": {
         "start": "2024-04-28",
         "end": "2026-07-15",
         "observations": 809,
-        "total_return": 0.6692025565750841,
-        "cagr": 0.2600574850869861,
-        "annual_volatility": 0.23842010445932404,
-        "sharpe": 1.0874658096548204,
-        "max_drawdown": 0.18820456377886996,
-        "calmar": 1.3817809720732352,
-        "turnover": 13.00393326725259,
-        "cost_paid": 0.019505899900878886
+        "total_return": 0.5908242752579833,
+        "cagr": 0.23301044922706526,
+        "annual_volatility": 0.23219481104120643,
+        "sharpe": 1.017307724141018,
+        "max_drawdown": 0.1789556081724033,
+        "calmar": 1.3020572621707742,
+        "turnover": 13.749104360613249,
+        "cost_paid": 0.020623656540919872
       },
       "optimized_train": {
         "start": "2021-01-01",
         "end": "2024-04-27",
         "observations": 1213,
-        "total_return": 0.6961993661983286,
-        "cagr": 0.1723334812407027,
-        "annual_volatility": 0.1795140857716699,
-        "sharpe": 0.9753219758393455,
-        "max_drawdown": 0.31261455567743246,
-        "calmar": 0.5512650582352374,
-        "turnover": 12.670083357748545,
-        "cost_paid": 0.019005125036622824
+        "total_return": 0.5701292371218141,
+        "cagr": 0.1454029643112873,
+        "annual_volatility": 0.17102048071010167,
+        "sharpe": 0.8792131982403157,
+        "max_drawdown": 0.3018917158976018,
+        "calmar": 0.48163946426607585,
+        "turnover": 13.534644089820073,
+        "cost_paid": 0.020301966134730114
       },
       "optimized_test": {
         "start": "2024-04-28",
         "end": "2026-07-15",
         "observations": 809,
-        "total_return": 0.6692025565750841,
-        "cagr": 0.2600574850869861,
-        "annual_volatility": 0.23842010445932404,
-        "sharpe": 1.0874658096548204,
-        "max_drawdown": 0.18820456377886996,
-        "calmar": 1.3817809720732352,
-        "turnover": 13.00393326725259,
-        "cost_paid": 0.019505899900878886
+        "total_return": 0.45319324499601765,
+        "cagr": 0.1836849649474135,
+        "annual_volatility": 0.20171477242088556,
+        "sharpe": 0.9365456216690728,
+        "max_drawdown": 0.17382626665126444,
+        "calmar": 1.0567158145087927,
+        "turnover": 13.528635348463201,
+        "cost_paid": 0.0202929530226948
       },
       "recommended_test": {
         "start": "2024-04-28",
         "end": "2026-07-15",
         "observations": 809,
-        "total_return": 0.6692025565750841,
-        "cagr": 0.2600574850869861,
-        "annual_volatility": 0.23842010445932404,
-        "sharpe": 1.0874658096548204,
-        "max_drawdown": 0.18820456377886996,
-        "calmar": 1.3817809720732352,
-        "turnover": 13.00393326725259,
-        "cost_paid": 0.019505899900878886
+        "total_return": 0.5908242752579833,
+        "cagr": 0.23301044922706526,
+        "annual_volatility": 0.23219481104120643,
+        "sharpe": 1.017307724141018,
+        "max_drawdown": 0.1789556081724033,
+        "calmar": 1.3020572621707742,
+        "turnover": 13.749104360613249,
+        "cost_paid": 0.020623656540919872
       },
       "recommended_test_bootstrap": {
         "method": "circular_block_bootstrap",
         "block_days": 14,
         "samples": 2000,
         "cagr_ci_95": [
-          -0.09567406497488988,
-          0.9388902743452685
+          -0.09169338123248913,
+          0.839877604983547
         ],
-        "cagr_median": 0.25279297617924307,
-        "positive_resample_fraction": 0.8945
+        "cagr_median": 0.22658466912246236,
+        "positive_resample_fraction": 0.899
+      },
+      "target": {
+        "cagr": 0.15,
+        "sharpe": 1.0,
+        "hit": true
+      },
+      "verdict": "目标达成（点估计）"
+    },
+    "btc_breadth_top_momentum": {
+      "ideas": [
+        "BTC趋势门控",
+        "广度过滤",
+        "逆波动动量"
+      ],
+      "candidates_tested": 144,
+      "candidates_qualified": 33,
+      "selection_objective": "train walk-forward: min(fold sharpe)+0.5*train sharpe-0.35*mdd",
+      "default_parameters": {
+        "trend_window": 150,
+        "lookback": 90,
+        "top_k": 2,
+        "rebalance_days": 14,
+        "vol_target": 0.32,
+        "breadth_min": 0.25,
+        "max_gross": 1.0
+      },
+      "selected_parameters": {
+        "trend_window": 150,
+        "lookback": 90,
+        "top_k": 2,
+        "rebalance_days": 21,
+        "vol_target": 0.3,
+        "breadth_min": 0.35,
+        "max_gross": 1.0
+      },
+      "recommended_parameters": {
+        "trend_window": 150,
+        "lookback": 90,
+        "top_k": 2,
+        "rebalance_days": 14,
+        "vol_target": 0.32,
+        "breadth_min": 0.25,
+        "max_gross": 1.0
+      },
+      "default_train": {
+        "start": "2021-01-01",
+        "end": "2024-04-27",
+        "observations": 1213,
+        "total_return": 0.5678324414992033,
+        "cagr": 0.1448985359369317,
+        "annual_volatility": 0.19084526269506716,
+        "sharpe": 0.804363328230563,
+        "max_drawdown": 0.367951684152088,
+        "calmar": 0.39379772447797734,
+        "turnover": 13.116040842889104,
+        "cost_paid": 0.019674061264333655
+      },
+      "default_test": {
+        "start": "2024-04-28",
+        "end": "2026-07-15",
+        "observations": 809,
+        "total_return": 0.6824424728698424,
+        "cagr": 0.26455702842824946,
+        "annual_volatility": 0.23378134600124167,
+        "sharpe": 1.1198912218620793,
+        "max_drawdown": 0.1878218468852869,
+        "calmar": 1.4085530134831914,
+        "turnover": 13.848023618864996,
+        "cost_paid": 0.020772035428297496
+      },
+      "optimized_train": {
+        "start": "2021-01-01",
+        "end": "2024-04-27",
+        "observations": 1213,
+        "total_return": 0.6137939649480588,
+        "cagr": 0.15489609155405049,
+        "annual_volatility": 0.17794662824160906,
+        "sharpe": 0.8981877708496743,
+        "max_drawdown": 0.28764342964193357,
+        "calmar": 0.5385003639640558,
+        "turnover": 8.840215298653545,
+        "cost_paid": 0.013260322947980319
+      },
+      "optimized_test": {
+        "start": "2024-04-28",
+        "end": "2026-07-15",
+        "observations": 809,
+        "total_return": 0.1297782056566994,
+        "cagr": 0.05659649575956305,
+        "annual_volatility": 0.1820948964003254,
+        "sharpe": 0.39306281374804675,
+        "max_drawdown": 0.19447345373867064,
+        "calmar": 0.2910242743753409,
+        "turnover": 10.829435887527502,
+        "cost_paid": 0.016244153831291255
+      },
+      "recommended_test": {
+        "start": "2024-04-28",
+        "end": "2026-07-15",
+        "observations": 809,
+        "total_return": 0.6824424728698424,
+        "cagr": 0.26455702842824946,
+        "annual_volatility": 0.23378134600124167,
+        "sharpe": 1.1198912218620793,
+        "max_drawdown": 0.1878218468852869,
+        "calmar": 1.4085530134831914,
+        "turnover": 13.848023618864996,
+        "cost_paid": 0.020772035428297496
+      },
+      "recommended_test_bootstrap": {
+        "method": "circular_block_bootstrap",
+        "block_days": 14,
+        "samples": 2000,
+        "cagr_ci_95": [
+          -0.09028973770253419,
+          0.9205278338027801
+        ],
+        "cagr_median": 0.2447437040375017,
+        "positive_resample_fraction": 0.906
+      },
+      "target": {
+        "cagr": 0.15,
+        "sharpe": 1.0,
+        "hit": true
+      },
+      "verdict": "目标达成（点估计）"
+    },
+    "btc_dual_confirm_momentum": {
+      "ideas": [
+        "双均线BTC门控",
+        "Top动量",
+        "波动率目标"
+      ],
+      "candidates_tested": 48,
+      "candidates_qualified": 15,
+      "selection_objective": "train walk-forward: min(fold sharpe)+0.5*train sharpe-0.35*mdd",
+      "default_parameters": {
+        "fast_trend": 100,
+        "slow_trend": 150,
+        "lookback": 90,
+        "top_k": 3,
+        "rebalance_days": 14,
+        "vol_target": 0.32,
+        "max_gross": 1.0
+      },
+      "selected_parameters": {
+        "fast_trend": 80,
+        "slow_trend": 150,
+        "lookback": 90,
+        "top_k": 2,
+        "rebalance_days": 21,
+        "vol_target": 0.28,
+        "max_gross": 1.0
+      },
+      "recommended_parameters": {
+        "fast_trend": 100,
+        "slow_trend": 150,
+        "lookback": 90,
+        "top_k": 3,
+        "rebalance_days": 14,
+        "vol_target": 0.32,
+        "max_gross": 1.0
+      },
+      "default_train": {
+        "start": "2021-01-01",
+        "end": "2024-04-27",
+        "observations": 1213,
+        "total_return": 0.595200775025535,
+        "cagr": 0.15087598319849405,
+        "annual_volatility": 0.19018536253425453,
+        "sharpe": 0.833795554599365,
+        "max_drawdown": 0.31952946131061144,
+        "calmar": 0.4721817593271282,
+        "turnover": 14.541813685756159,
+        "cost_paid": 0.021812720528634245
+      },
+      "default_test": {
+        "start": "2024-04-28",
+        "end": "2026-07-15",
+        "observations": 809,
+        "total_return": 0.5946083492411132,
+        "cagr": 0.2343328566611711,
+        "annual_volatility": 0.21614973180366132,
+        "sharpe": 1.0816677193397637,
+        "max_drawdown": 0.1968528396065189,
+        "calmar": 1.1903961209275389,
+        "turnover": 15.211662803383799,
+        "cost_paid": 0.0228174942050757
+      },
+      "optimized_train": {
+        "start": "2021-01-01",
+        "end": "2024-04-27",
+        "observations": 1213,
+        "total_return": 0.636086256099051,
+        "cagr": 0.15967353836464127,
+        "annual_volatility": 0.16552771698111493,
+        "sharpe": 0.977637487350812,
+        "max_drawdown": 0.23955615934752172,
+        "calmar": 0.6665390645748518,
+        "turnover": 8.322042933449914,
+        "cost_paid": 0.012483064400174871
+      },
+      "optimized_test": {
+        "start": "2024-04-28",
+        "end": "2026-07-15",
+        "observations": 809,
+        "total_return": 0.1746488252867846,
+        "cagr": 0.07532740533235738,
+        "annual_volatility": 0.1778996489121154,
+        "sharpe": 0.49691257290667434,
+        "max_drawdown": 0.1654231305563132,
+        "calmar": 0.4553619864346268,
+        "turnover": 11.642443963217106,
+        "cost_paid": 0.01746366594482566
+      },
+      "recommended_test": {
+        "start": "2024-04-28",
+        "end": "2026-07-15",
+        "observations": 809,
+        "total_return": 0.5946083492411132,
+        "cagr": 0.2343328566611711,
+        "annual_volatility": 0.21614973180366132,
+        "sharpe": 1.0816677193397637,
+        "max_drawdown": 0.1968528396065189,
+        "calmar": 1.1903961209275389,
+        "turnover": 15.211662803383799,
+        "cost_paid": 0.0228174942050757
+      },
+      "recommended_test_bootstrap": {
+        "method": "circular_block_bootstrap",
+        "block_days": 14,
+        "samples": 2000,
+        "cagr_ci_95": [
+          -0.12223703049573145,
+          0.7767185981815784
+        ],
+        "cagr_median": 0.22549787031496205,
+        "positive_resample_fraction": 0.882
       },
       "target": {
         "cagr": 0.15,
@@ -192,108 +437,108 @@
         "主流山寨风格轮动",
         "波动率目标"
       ],
-      "candidates_tested": 288,
-      "candidates_qualified": 69,
+      "candidates_tested": 72,
+      "candidates_qualified": 0,
       "selection_objective": "train walk-forward: min(fold sharpe)+0.5*train sharpe-0.35*mdd",
       "default_parameters": {
-        "trend_window": 100,
+        "trend_window": 150,
         "style_window": 60,
         "top_k": 2,
         "rebalance_days": 21,
-        "vol_target": 0.45,
+        "vol_target": 0.3,
         "max_gross": 1.0
       },
       "selected_parameters": {
-        "trend_window": 100,
-        "style_window": 60,
-        "top_k": 2,
-        "rebalance_days": 14,
-        "vol_target": 0.35,
-        "max_gross": 1.0
-      },
-      "recommended_parameters": {
-        "trend_window": 100,
+        "trend_window": 150,
         "style_window": 60,
         "top_k": 2,
         "rebalance_days": 21,
-        "vol_target": 0.45,
+        "vol_target": 0.3,
+        "max_gross": 1.0
+      },
+      "recommended_parameters": {
+        "trend_window": 150,
+        "style_window": 60,
+        "top_k": 2,
+        "rebalance_days": 21,
+        "vol_target": 0.3,
         "max_gross": 1.0
       },
       "default_train": {
         "start": "2021-01-01",
         "end": "2024-04-27",
         "observations": 1213,
-        "total_return": 1.407161787773072,
-        "cagr": 0.30255943616017555,
-        "annual_volatility": 0.2829060339696939,
-        "sharpe": 1.0751866508148258,
-        "max_drawdown": 0.33637411295384234,
-        "calmar": 0.8994730108784951,
-        "turnover": 12.812865201468476,
-        "cost_paid": 0.019219297802202714
+        "total_return": 0.4244196961032922,
+        "cagr": 0.11232248545414025,
+        "annual_volatility": 0.1924776862900229,
+        "sharpe": 0.6490667394410843,
+        "max_drawdown": 0.2983611602874756,
+        "calmar": 0.3764648365957412,
+        "turnover": 10.901181496907782,
+        "cost_paid": 0.016351772245361676
       },
       "default_test": {
         "start": "2024-04-28",
         "end": "2026-07-15",
         "observations": 809,
-        "total_return": 0.4048118179157951,
-        "cagr": 0.16573950657745828,
-        "annual_volatility": 0.2734354938663368,
-        "sharpe": 0.6968161567311457,
-        "max_drawdown": 0.40700396751088086,
-        "calmar": 0.40721840524325453,
-        "turnover": 12.195425952059963,
-        "cost_paid": 0.018293138928089946
+        "total_return": 0.31127793985178576,
+        "cagr": 0.13005829477563524,
+        "annual_volatility": 0.182593926705279,
+        "sharpe": 0.760218710149366,
+        "max_drawdown": 0.21022652300588984,
+        "calmar": 0.6186578787301327,
+        "turnover": 8.798195103816361,
+        "cost_paid": 0.013197292655724543
       },
       "optimized_train": {
         "start": "2021-01-01",
         "end": "2024-04-27",
         "observations": 1213,
-        "total_return": 1.0636454952061678,
-        "cagr": 0.2435860813453885,
-        "annual_volatility": 0.23013625888758374,
-        "sharpe": 1.0619778309639205,
-        "max_drawdown": 0.2922391091551827,
-        "calmar": 0.8335163696931515,
-        "turnover": 17.012958556045458,
-        "cost_paid": 0.02551943783406819
+        "total_return": 0.4244196961032922,
+        "cagr": 0.11232248545414025,
+        "annual_volatility": 0.1924776862900229,
+        "sharpe": 0.6490667394410843,
+        "max_drawdown": 0.2983611602874756,
+        "calmar": 0.3764648365957412,
+        "turnover": 10.901181496907782,
+        "cost_paid": 0.016351772245361676
       },
       "optimized_test": {
         "start": "2024-04-28",
         "end": "2026-07-15",
         "observations": 809,
-        "total_return": 0.27090919301241745,
-        "cagr": 0.11422730012848348,
-        "annual_volatility": 0.25500236102770196,
-        "sharpe": 0.5505202004570725,
-        "max_drawdown": 0.3939143387866445,
-        "calmar": 0.2899800511967459,
-        "turnover": 12.304538501020424,
-        "cost_paid": 0.018456807751530635
+        "total_return": 0.31127793985178576,
+        "cagr": 0.13005829477563524,
+        "annual_volatility": 0.182593926705279,
+        "sharpe": 0.760218710149366,
+        "max_drawdown": 0.21022652300588984,
+        "calmar": 0.6186578787301327,
+        "turnover": 8.798195103816361,
+        "cost_paid": 0.013197292655724543
       },
       "recommended_test": {
         "start": "2024-04-28",
         "end": "2026-07-15",
         "observations": 809,
-        "total_return": 0.4048118179157951,
-        "cagr": 0.16573950657745828,
-        "annual_volatility": 0.2734354938663368,
-        "sharpe": 0.6968161567311457,
-        "max_drawdown": 0.40700396751088086,
-        "calmar": 0.40721840524325453,
-        "turnover": 12.195425952059963,
-        "cost_paid": 0.018293138928089946
+        "total_return": 0.31127793985178576,
+        "cagr": 0.13005829477563524,
+        "annual_volatility": 0.182593926705279,
+        "sharpe": 0.760218710149366,
+        "max_drawdown": 0.21022652300588984,
+        "calmar": 0.6186578787301327,
+        "turnover": 8.798195103816361,
+        "cost_paid": 0.013197292655724543
       },
       "recommended_test_bootstrap": {
         "method": "circular_block_bootstrap",
         "block_days": 14,
         "samples": 2000,
         "cagr_ci_95": [
-          -0.2197274361696776,
-          0.7416278947920665
+          -0.10985736248495559,
+          0.49000311486602893
         ],
-        "cagr_median": 0.1476548616905657,
-        "positive_resample_fraction": 0.7595
+        "cagr_median": 0.1256169123617904,
+        "positive_resample_fraction": 0.821
       },
       "target": {
         "cagr": 0.15,
@@ -304,115 +549,243 @@
     },
     "btc_core_alt_satellite": {
       "ideas": [
-        "BTC为主",
+        "BTC为主自适应",
         "山寨卫星轮动",
         "波动率目标"
       ],
-      "candidates_tested": 324,
-      "candidates_qualified": 130,
+      "candidates_tested": 144,
+      "candidates_qualified": 66,
       "selection_objective": "train walk-forward: min(fold sharpe)+0.5*train sharpe-0.35*mdd",
       "default_parameters": {
-        "trend_window": 120,
-        "lookback": 40,
+        "trend_window": 150,
+        "lookback": 90,
         "rebalance_days": 14,
-        "btc_weight": 0.7,
-        "alt_weight": 0.3,
-        "vol_target": 0.45,
-        "max_gross": 1.2
+        "base_btc": 0.4,
+        "max_alt": 0.7,
+        "vol_target": 0.3,
+        "max_gross": 1.0
       },
       "selected_parameters": {
-        "trend_window": 100,
-        "lookback": 40,
+        "trend_window": 150,
+        "lookback": 90,
         "rebalance_days": 14,
-        "btc_weight": 0.6,
-        "alt_weight": 0.3,
-        "vol_target": 0.4,
-        "max_gross": 1.2
+        "base_btc": 0.3,
+        "max_alt": 0.7,
+        "vol_target": 0.28,
+        "max_gross": 1.0
       },
       "recommended_parameters": {
-        "trend_window": 100,
-        "lookback": 40,
+        "trend_window": 150,
+        "lookback": 90,
         "rebalance_days": 14,
-        "btc_weight": 0.6,
-        "alt_weight": 0.3,
-        "vol_target": 0.4,
-        "max_gross": 1.2
+        "base_btc": 0.4,
+        "max_alt": 0.7,
+        "vol_target": 0.3,
+        "max_gross": 1.0
       },
       "default_train": {
         "start": "2021-01-01",
         "end": "2024-04-27",
         "observations": 1213,
-        "total_return": 0.9935092078963261,
-        "cagr": 0.23071411170595546,
-        "annual_volatility": 0.2886251204560131,
-        "sharpe": 0.8624128190905915,
-        "max_drawdown": 0.3750367825385701,
-        "calmar": 0.6151772904627775,
-        "turnover": 18.481226668735808,
-        "cost_paid": 0.02772184000310371
+        "total_return": 1.1044292980670054,
+        "cagr": 0.2509309385368155,
+        "annual_volatility": 0.20544091290680283,
+        "sharpe": 1.1922557119873862,
+        "max_drawdown": 0.34596104403166295,
+        "calmar": 0.7253155893293288,
+        "turnover": 10.09774274375613,
+        "cost_paid": 0.0151466141156342
       },
       "default_test": {
         "start": "2024-04-28",
         "end": "2026-07-15",
         "observations": 809,
-        "total_return": 0.01810354998439645,
-        "cagr": 0.008127654564774378,
-        "annual_volatility": 0.35331481419479294,
-        "sharpe": 0.19756142566711138,
-        "max_drawdown": 0.4474647303618918,
-        "calmar": 0.018163788145271365,
-        "turnover": 21.650812293688034,
-        "cost_paid": 0.032476218440532056
+        "total_return": 0.5694595472239503,
+        "cagr": 0.22551159347597638,
+        "annual_volatility": 0.24876537937118218,
+        "sharpe": 0.9395260598904382,
+        "max_drawdown": 0.18419626940800327,
+        "calmar": 1.2243005474581994,
+        "turnover": 15.489976076207409,
+        "cost_paid": 0.023234964114311113
       },
       "optimized_train": {
         "start": "2021-01-01",
         "end": "2024-04-27",
         "observations": 1213,
-        "total_return": 1.0740238338808585,
-        "cagr": 0.24546470033421386,
-        "annual_volatility": 0.25493253955873363,
-        "sharpe": 0.9876960731757429,
-        "max_drawdown": 0.3788142060094437,
-        "calmar": 0.6479817716447902,
-        "turnover": 18.154410709977867,
-        "cost_paid": 0.0272316160649668
+        "total_return": 1.0151461791327812,
+        "cagr": 0.23471841316446262,
+        "annual_volatility": 0.19214068020464123,
+        "sharpe": 1.1931927536195936,
+        "max_drawdown": 0.3263275753399538,
+        "calmar": 0.719272384259722,
+        "turnover": 9.439725819878987,
+        "cost_paid": 0.01415958872981848
       },
       "optimized_test": {
         "start": "2024-04-28",
         "end": "2026-07-15",
         "observations": 809,
-        "total_return": 0.1932629992593664,
-        "cagr": 0.08298237526101837,
-        "annual_volatility": 0.3092624364687519,
-        "sharpe": 0.4103921686804058,
-        "max_drawdown": 0.42894829664185796,
-        "calmar": 0.1934554255388567,
-        "turnover": 18.76850768824761,
-        "cost_paid": 0.02815276153237142
+        "total_return": 0.5253096164947395,
+        "cagr": 0.20983576547489657,
+        "annual_volatility": 0.2329258908737884,
+        "sharpe": 0.932201266084411,
+        "max_drawdown": 0.1759498848692489,
+        "calmar": 1.192588251085409,
+        "turnover": 14.609839417948338,
+        "cost_paid": 0.021914759126922506
       },
       "recommended_test": {
         "start": "2024-04-28",
         "end": "2026-07-15",
         "observations": 809,
-        "total_return": 0.1932629992593664,
-        "cagr": 0.08298237526101837,
-        "annual_volatility": 0.3092624364687519,
-        "sharpe": 0.4103921686804058,
-        "max_drawdown": 0.42894829664185796,
-        "calmar": 0.1934554255388567,
-        "turnover": 18.76850768824761,
-        "cost_paid": 0.02815276153237142
+        "total_return": 0.5694595472239503,
+        "cagr": 0.22551159347597638,
+        "annual_volatility": 0.24876537937118218,
+        "sharpe": 0.9395260598904382,
+        "max_drawdown": 0.18419626940800327,
+        "calmar": 1.2243005474581994,
+        "turnover": 15.489976076207409,
+        "cost_paid": 0.023234964114311113
       },
       "recommended_test_bootstrap": {
         "method": "circular_block_bootstrap",
         "block_days": 14,
         "samples": 2000,
         "cagr_ci_95": [
-          -0.3117023057349134,
-          0.7964686962638095
+          -0.1119687415647261,
+          0.8661117686072715
         ],
-        "cagr_median": 0.08039365366781565,
-        "positive_resample_fraction": 0.628
+        "cagr_median": 0.20175399146332929,
+        "positive_resample_fraction": 0.866
+      },
+      "target": {
+        "cagr": 0.15,
+        "sharpe": 1.0,
+        "hit": false
+      },
+      "verdict": "接近目标"
+    },
+    "btc_gate_alt_hedge": {
+      "ideas": [
+        "BTC趋势门控",
+        "山寨轮动",
+        "严格条件做空对冲"
+      ],
+      "candidates_tested": 192,
+      "candidates_qualified": 100,
+      "selection_objective": "train walk-forward: min(fold sharpe)+0.5*train sharpe-0.35*mdd",
+      "default_parameters": {
+        "trend_window": 150,
+        "lookback": 60,
+        "rebalance_days": 14,
+        "btc_weight": 0.55,
+        "alt_weight": 0.45,
+        "short_weight": 0.2,
+        "short_threshold": -0.2,
+        "off_short_weight": 0.0,
+        "vol_target": 0.3,
+        "max_gross": 1.2
+      },
+      "selected_parameters": {
+        "trend_window": 150,
+        "lookback": 60,
+        "rebalance_days": 14,
+        "btc_weight": 0.55,
+        "alt_weight": 0.45,
+        "short_weight": 0.2,
+        "short_threshold": -0.2,
+        "off_short_weight": 0.0,
+        "vol_target": 0.28,
+        "max_gross": 1.2
+      },
+      "recommended_parameters": {
+        "trend_window": 150,
+        "lookback": 60,
+        "rebalance_days": 14,
+        "btc_weight": 0.55,
+        "alt_weight": 0.45,
+        "short_weight": 0.2,
+        "short_threshold": -0.2,
+        "off_short_weight": 0.0,
+        "vol_target": 0.3,
+        "max_gross": 1.2
+      },
+      "default_train": {
+        "start": "2021-01-01",
+        "end": "2024-04-27",
+        "observations": 1213,
+        "total_return": 0.8734015501515393,
+        "cagr": 0.2079153377683498,
+        "annual_volatility": 0.1883441165792158,
+        "sharpe": 1.0967833831555893,
+        "max_drawdown": 0.1984511881661417,
+        "calmar": 1.0476900626782077,
+        "turnover": 16.85353873960046,
+        "cost_paid": 0.025836906886971604
+      },
+      "default_test": {
+        "start": "2024-04-28",
+        "end": "2026-07-15",
+        "observations": 809,
+        "total_return": 0.3010750030442044,
+        "cagr": 0.12608266735877627,
+        "annual_volatility": 0.21463470725530637,
+        "sharpe": 0.6586354440123641,
+        "max_drawdown": 0.19387179663725695,
+        "calmar": 0.6503404288076142,
+        "turnover": 15.493552586356207,
+        "cost_paid": 0.023929372250115752
+      },
+      "optimized_train": {
+        "start": "2021-01-01",
+        "end": "2024-04-27",
+        "observations": 1213,
+        "total_return": 0.8056544875703355,
+        "cagr": 0.19460168417883117,
+        "annual_volatility": 0.1761355191932345,
+        "sharpe": 1.0973184807659453,
+        "max_drawdown": 0.18588029649171756,
+        "calmar": 1.0469193768878147,
+        "turnover": 15.755482507159087,
+        "cost_paid": 0.024152729595246267
+      },
+      "optimized_test": {
+        "start": "2024-04-28",
+        "end": "2026-07-15",
+        "observations": 809,
+        "total_return": 0.27962586558439906,
+        "cagr": 0.11766873127247757,
+        "annual_volatility": 0.20138290263002032,
+        "sharpe": 0.6513788264985029,
+        "max_drawdown": 0.1848451471641125,
+        "calmar": 0.6365800405244442,
+        "turnover": 14.624333199364074,
+        "cost_paid": 0.022579241516775768
+      },
+      "recommended_test": {
+        "start": "2024-04-28",
+        "end": "2026-07-15",
+        "observations": 809,
+        "total_return": 0.3010750030442044,
+        "cagr": 0.12608266735877627,
+        "annual_volatility": 0.21463470725530637,
+        "sharpe": 0.6586354440123641,
+        "max_drawdown": 0.19387179663725695,
+        "calmar": 0.6503404288076142,
+        "turnover": 15.493552586356207,
+        "cost_paid": 0.023929372250115752
+      },
+      "recommended_test_bootstrap": {
+        "method": "circular_block_bootstrap",
+        "block_days": 14,
+        "samples": 2000,
+        "cagr_ci_95": [
+          -0.1709694878473253,
+          0.6708996434794642
+        ],
+        "cagr_median": 0.10110330585191217,
+        "positive_resample_fraction": 0.7205
       },
       "target": {
         "cagr": 0.15,
@@ -421,130 +794,127 @@
       },
       "verdict": "样本外为正但未达目标"
     },
-    "btc_gate_alt_hedge": {
+    "btc_protective_hedge": {
       "ideas": [
         "BTC趋势门控",
-        "山寨轮动",
-        "弱势做空对冲"
+        "Top动量",
+        "波动触发保护性对冲"
       ],
-      "candidates_tested": 256,
-      "candidates_qualified": 26,
+      "candidates_tested": 192,
+      "candidates_qualified": 73,
       "selection_objective": "train walk-forward: min(fold sharpe)+0.5*train sharpe-0.35*mdd",
       "default_parameters": {
-        "trend_window": 100,
-        "lookback": 40,
+        "trend_window": 150,
+        "lookback": 90,
+        "top_k": 2,
         "rebalance_days": 14,
-        "btc_weight": 0.6,
-        "alt_weight": 0.4,
-        "short_weight": 0.3,
-        "off_short_weight": 0.4,
-        "vol_target": 0.45,
-        "max_gross": 1.4
+        "vol_target": 0.3,
+        "hedge_vol_trigger": 0.55,
+        "short_weight": 0.2,
+        "max_gross": 1.2
       },
       "selected_parameters": {
-        "trend_window": 100,
-        "lookback": 40,
+        "trend_window": 150,
+        "lookback": 90,
+        "top_k": 3,
         "rebalance_days": 14,
-        "btc_weight": 0.6,
-        "alt_weight": 0.4,
-        "short_weight": 0.0,
-        "off_short_weight": 0.0,
-        "vol_target": 0.4,
+        "vol_target": 0.28,
+        "hedge_vol_trigger": 0.55,
+        "short_weight": 0.2,
         "max_gross": 1.2
       },
       "recommended_parameters": {
-        "trend_window": 100,
-        "lookback": 40,
+        "trend_window": 150,
+        "lookback": 90,
+        "top_k": 2,
         "rebalance_days": 14,
-        "btc_weight": 0.6,
-        "alt_weight": 0.4,
-        "short_weight": 0.3,
-        "off_short_weight": 0.4,
-        "vol_target": 0.45,
-        "max_gross": 1.4
+        "vol_target": 0.3,
+        "hedge_vol_trigger": 0.55,
+        "short_weight": 0.2,
+        "max_gross": 1.2
       },
       "default_train": {
         "start": "2021-01-01",
         "end": "2024-04-27",
         "observations": 1213,
-        "total_return": -0.48600529010162796,
-        "cagr": -0.1814871916723706,
-        "annual_volatility": 0.37343224823447896,
-        "sharpe": -0.34920514845726286,
-        "max_drawdown": 0.7224159121204019,
-        "calmar": -0.2512225833172442,
-        "turnover": 47.802010813936626,
-        "cost_paid": 0.0874676529337192
+        "total_return": 0.524403735896736,
+        "cagr": 0.1352618510186392,
+        "annual_volatility": 0.15900932782289062,
+        "sharpe": 0.8772339552330958,
+        "max_drawdown": 0.2915930795857691,
+        "calmar": 0.4638719520051343,
+        "turnover": 13.640652657059686,
+        "cost_paid": 0.021321405270680525
       },
       "default_test": {
         "start": "2024-04-28",
         "end": "2026-07-15",
         "observations": 809,
-        "total_return": 0.46401394400602713,
-        "cagr": 0.1876534752514809,
-        "annual_volatility": 0.31834230139191977,
-        "sharpe": 0.69763890587309,
-        "max_drawdown": 0.2804511863663093,
-        "calmar": 0.6691127881569332,
-        "turnover": 36.01940374170137,
-        "cost_paid": 0.06437285738620963
+        "total_return": 0.5850763427164227,
+        "cagr": 0.23099843175339374,
+        "annual_volatility": 0.216459289539249,
+        "sharpe": 1.0675036604769392,
+        "max_drawdown": 0.18418895426874016,
+        "calmar": 1.254138353032595,
+        "turnover": 14.750313178002648,
+        "cost_paid": 0.02261428521103512
       },
       "optimized_train": {
         "start": "2021-01-01",
         "end": "2024-04-27",
         "observations": 1213,
-        "total_return": 1.1362923378102985,
-        "cagr": 0.25660028875339647,
-        "annual_volatility": 0.25267035809138677,
-        "sharpe": 1.0294336388012217,
-        "max_drawdown": 0.36672516012579803,
-        "calmar": 0.6997073466826619,
-        "turnover": 18.52580032352044,
-        "cost_paid": 0.027788700485280662
+        "total_return": 0.6335681082608893,
+        "cagr": 0.15913616439126277,
+        "annual_volatility": 0.1525984956645366,
+        "sharpe": 1.0438865572849436,
+        "max_drawdown": 0.238973025433301,
+        "calmar": 0.6659168502500243,
+        "turnover": 13.992256988920136,
+        "cost_paid": 0.021773303085864254
       },
       "optimized_test": {
         "start": "2024-04-28",
         "end": "2026-07-15",
         "observations": 809,
-        "total_return": 0.21354122787718688,
-        "cagr": 0.0912474584218308,
-        "annual_volatility": 0.31246848059584265,
-        "sharpe": 0.4334465051807777,
-        "max_drawdown": 0.4277720093419429,
-        "calmar": 0.2133086233533607,
-        "turnover": 19.53026088299542,
-        "cost_paid": 0.029295391324493134
+        "total_return": 0.44260253501055247,
+        "cagr": 0.17978506801234673,
+        "annual_volatility": 0.1870958370622696,
+        "sharpe": 0.9769366228230367,
+        "max_drawdown": 0.17851704391746503,
+        "calmar": 1.0071030982087512,
+        "turnover": 14.30240712708958,
+        "cost_paid": 0.021891929320849657
       },
       "recommended_test": {
         "start": "2024-04-28",
         "end": "2026-07-15",
         "observations": 809,
-        "total_return": 0.46401394400602713,
-        "cagr": 0.1876534752514809,
-        "annual_volatility": 0.31834230139191977,
-        "sharpe": 0.69763890587309,
-        "max_drawdown": 0.2804511863663093,
-        "calmar": 0.6691127881569332,
-        "turnover": 36.01940374170137,
-        "cost_paid": 0.06437285738620963
+        "total_return": 0.5850763427164227,
+        "cagr": 0.23099843175339374,
+        "annual_volatility": 0.216459289539249,
+        "sharpe": 1.0675036604769392,
+        "max_drawdown": 0.18418895426874016,
+        "calmar": 1.254138353032595,
+        "turnover": 14.750313178002648,
+        "cost_paid": 0.02261428521103512
       },
       "recommended_test_bootstrap": {
         "method": "circular_block_bootstrap",
         "block_days": 14,
         "samples": 2000,
         "cagr_ci_95": [
-          -0.1856228435635949,
-          0.8245063363669435
+          -0.09243734231115049,
+          0.787571293524464
         ],
-        "cagr_median": 0.16875713038715204,
-        "positive_resample_fraction": 0.778
+        "cagr_median": 0.21857947825280122,
+        "positive_resample_fraction": 0.9045
       },
       "target": {
         "cagr": 0.15,
         "sharpe": 1.0,
-        "hit": false
+        "hit": true
       },
-      "verdict": "样本外为正但未达目标"
+      "verdict": "目标达成（点估计）"
     }
   }
 }

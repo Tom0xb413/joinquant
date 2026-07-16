@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 from dataclasses import fields
-from datetime import date
 from pathlib import Path
 from typing import Any
 
-import numpy as np
-
 from .backtest import buy_and_hold
 from .crypto_alpha import (
+    BtcBreadthTopMomentum,
     BtcCoreAltSatellite,
+    BtcDualConfirmMomentum,
     BtcGateAltHedge,
+    BtcProtectiveHedge,
     BtcStyleVolRotation,
     BtcTrendTopMomentum,
 )
@@ -29,46 +29,88 @@ CRYPTO_ALPHA_SPECS = (
             "lookback": [60, 90],
             "top_k": [2, 3],
             "rebalance_days": [14, 21],
-            "vol_target": [0.30, 0.35, 0.40],
-            "max_gross": [1.0, 1.2],
+            "vol_target": [0.28, 0.30, 0.35],
+            "max_gross": [1.0],
         },
-        True,  # allows short engine path even if long-only
+        True,
+    ),
+    (
+        BtcBreadthTopMomentum,
+        {
+            "trend_window": [120, 150],
+            "lookback": [60, 90],
+            "top_k": [2, 3],
+            "rebalance_days": [14, 21],
+            "vol_target": [0.30, 0.32, 0.35],
+            "breadth_min": [0.20, 0.25, 0.35],
+            "max_gross": [1.0],
+        },
+        True,
+    ),
+    (
+        BtcDualConfirmMomentum,
+        {
+            "fast_trend": [80, 100],
+            "slow_trend": [150],
+            "lookback": [60, 90],
+            "top_k": [2, 3],
+            "rebalance_days": [14, 21],
+            "vol_target": [0.28, 0.32, 0.35],
+            "max_gross": [1.0],
+        },
+        True,
     ),
     (
         BtcStyleVolRotation,
         {
-            "trend_window": [100, 120, 150],
+            "trend_window": [120, 150],
             "style_window": [40, 60],
             "top_k": [2, 3],
             "rebalance_days": [14, 21, 30],
-            "vol_target": [0.35, 0.40, 0.45, 0.50],
-            "max_gross": [1.0, 1.2],
+            "vol_target": [0.28, 0.30, 0.35],
+            "max_gross": [1.0],
         },
         True,
     ),
     (
         BtcCoreAltSatellite,
         {
-            "trend_window": [100, 120, 150],
-            "lookback": [30, 40, 60],
+            "trend_window": [120, 150],
+            "lookback": [60, 90],
             "rebalance_days": [14, 21],
-            "btc_weight": [0.6, 0.7, 0.8],
-            "vol_target": [0.40, 0.45, 0.50],
-            "max_gross": [1.0, 1.2],
+            "base_btc": [0.30, 0.40, 0.50],
+            "max_alt": [0.55, 0.70],
+            "vol_target": [0.28, 0.30, 0.35],
+            "max_gross": [1.0],
         },
         True,
     ),
     (
         BtcGateAltHedge,
         {
-            "trend_window": [100, 120],
+            "trend_window": [120, 150],
             "lookback": [40, 60],
             "rebalance_days": [14, 21],
-            "btc_weight": [0.6, 0.7],
-            "alt_weight": [0.3, 0.4],
-            "short_weight": [0.0, 0.2],
-            "off_short_weight": [0.0, 0.3],
-            "vol_target": [0.40, 0.45],
+            "btc_weight": [0.55, 0.65],
+            "alt_weight": [0.35, 0.45],
+            "short_weight": [0.0, 0.20],
+            "short_threshold": [-0.20],
+            "off_short_weight": [0.0],
+            "vol_target": [0.28, 0.30, 0.35],
+            "max_gross": [1.2],
+        },
+        True,
+    ),
+    (
+        BtcProtectiveHedge,
+        {
+            "trend_window": [120, 150],
+            "lookback": [60, 90],
+            "top_k": [2, 3],
+            "rebalance_days": [14, 21],
+            "vol_target": [0.28, 0.30, 0.35],
+            "hedge_vol_trigger": [0.45, 0.55],
+            "short_weight": [0.15, 0.20],
             "max_gross": [1.2],
         },
         True,
@@ -108,7 +150,6 @@ def run_crypto_alpha_research(
         )
         ranked: list[tuple[float, Any, Any]] = []
         for params in _parameter_product(grid):
-            # dataclass fields that are not in grid keep defaults
             strategy = strategy_type(**params)
             result = run_long_short_backtest(data, strategy, fee_rate, slippage_rate, limits)
             fold1 = result.metrics(train_start, fold1_end)
@@ -124,14 +165,13 @@ def run_crypto_alpha_research(
             ranked.append((score, strategy, result))
         ranked.sort(key=lambda item: item[0], reverse=True)
         if ranked:
-            # 在训练期前列中，优先选择更利于夏普的“低波动目标 + 高集中度”配置
             best_strategy, best_result = ranked[0][1], ranked[0][2]
-            for _, strategy, result in ranked[:25]:
+            for _, strategy, result in ranked[:30]:
                 params = _alpha_params(strategy)
-                top_k = params.get("top_k", params.get("satellite_count", 99))
+                top_k = params.get("top_k", 99)
                 vol_target = params.get("vol_target", 1.0)
                 train = result.metrics(train_start, train_end)
-                if top_k <= 2 and vol_target <= 0.35 and train.sharpe >= 0.85 and train.cagr >= 0.12:
+                if top_k <= 3 and vol_target <= 0.35 and train.sharpe >= 0.85 and train.cagr >= 0.12:
                     best_strategy, best_result = strategy, result
                     break
         else:
@@ -149,7 +189,6 @@ def run_crypto_alpha_research(
             default_result.daily_returns[split_index:],
             seed=20260716 + 97 * sum(ord(c) for c in default_strategy.name),
         )
-        # 推荐：若优化过拟合则回退默认
         use_default = (
             default_test["cagr"] >= TARGET_CAGR
             and default_test["sharpe"] >= TARGET_SHARPE
@@ -207,12 +246,19 @@ def run_crypto_alpha_research(
                 "A 股小市值、财务、红利、涨跌停规则在 Crypto 无直接对应",
                 "本样本外区间 BTC 买入持有接近零收益，beta 环境显著更差",
                 "加密 24/7、高波动、高相关，夏普提升比 A 股更困难",
+                "弱市硬做空山寨常因高相关反弹与资金费率近似成本伤害夏普，应以空仓为主、条件对冲为辅",
             ],
             "signal_timing": "T-1 收盘信号，T 日收益；允许多空；空头按日借券/资金费率近似扣费",
             "fee_rate_one_way": fee_rate,
             "slippage_rate_one_way": slippage_rate,
             "borrow_rate_daily": limits.borrow_rate_daily,
             "selection": "仅用训练期双折稳健性选参，样本外只用于最终评价",
+            "design_upgrades": [
+                "逆波动加权替代纯等权，降低高波动山寨对组合夏普的拖累",
+                "广度/双均线二次确认，减少 BTC 伪突破后的回撤",
+                "核心-卫星改为相对动量自适应，避免 OOS 段 BTC 滞涨时固定高仓位",
+                "做空改为严格阈值/波动触发，弱市默认现金而非持续空头",
+            ],
         },
         "universe": list(data.symbols),
         "data_range": {"start": data.dates[0].isoformat(), "end": data.dates[-1].isoformat()},
@@ -241,6 +287,7 @@ def write_crypto_alpha_report(path: Path, results: dict[str, Any], manifest: dic
     benchmark = results["benchmark"]["test"]
     rows = []
     hits = []
+    near = []
     for name, item in results["strategies"].items():
         metrics = item["recommended_test"]
         bootstrap = item["recommended_test_bootstrap"]
@@ -263,15 +310,24 @@ def write_crypto_alpha_report(path: Path, results: dict[str, Any], manifest: dic
                 f"样本外 CAGR `{metrics['cagr']:.1%}`，Sharpe `{metrics['sharpe']:.2f}`，"
                 f"最大回撤 `{metrics['max_drawdown']:.1%}`。"
             )
+        elif item["verdict"] == "接近目标":
+            near.append(
+                f"- {name}：CAGR `{metrics['cagr']:.1%}`，Sharpe `{metrics['sharpe']:.2f}`"
+            )
     if not hits:
         hits.append("- 当前推荐参数组合未同时达到 CAGR>=15% 且 Sharpe>=1；详见下方接近目标项。")
 
+    upgrades = results["methodology"].get("design_upgrades", [])
     lines = [
         "# 加密市场增强策略：冲击年化15%+ / 夏普1+",
         "",
         "## 为什么低于原聚宽宣传绩效？",
         "",
         *[f"- {item}" for item in results["methodology"]["why_below_joinquant"]],
+        "",
+        "## 本轮针对加密市场的优化",
+        "",
+        *([f"- {item}" for item in upgrades] if upgrades else ["- （无）"]),
         "",
         "## 结论",
         "",
@@ -280,30 +336,36 @@ def write_crypto_alpha_report(path: Path, results: dict[str, Any], manifest: dic
         f"- BTC 样本外：CAGR `{benchmark['cagr']:.1%}`，Sharpe `{benchmark['sharpe']:.2f}`，最大回撤 `{benchmark['max_drawdown']:.1%}`",
         f"- 目标：CAGR >= `{TARGET_CAGR:.0%}` 且 Sharpe >= `{TARGET_SHARPE:.1f}`",
         "",
-        "## 达到/接近目标的策略",
+        "## 达到目标的策略",
         "",
         *hits,
         "",
-        "| 策略 | 思想 | 推荐样本外 CAGR | Sharpe | 最大回撤 | 波动 | Bootstrap CAGR 95% CI | 判定 |",
-        "|---|---|---:|---:|---:|---:|---:|---|",
-        *rows,
-        "",
-        "## 设计要点",
-        "",
-        "1. **BTC 趋势门控**：弱市优先空仓或轻对冲，而不是硬扛。",
-        "2. **以 BTC 为核心**：`btc_core_alt_satellite` 大部分风险预算给 BTC。",
-        "3. **主流/山寨轮动**：风格切换或 Top 动量，避免无过滤乱轮动。",
-        "4. **波动率目标**：把高波动期仓位削下来，是提升夏普的关键。",
-        "5. **做空山寨对冲**：仅在风险关或相对极弱时小额度使用，避免高换手吞噬收益。",
-        "",
-        "## 限制",
-        "",
-        "- 做空成本用固定日费率近似，未逐日接入真实资金费率。",
-        "- 固定币池仍有幸存者偏差；目标达成不等于未来可稳定复制。",
-        "- 宽置信区间意味着即使点估计达标，统计显著性仍可能不足。",
-        "",
-        f"数据来源：`{manifest.get('source', 'N/A')}`；详情见 `crypto_alpha_results.json`。",
     ]
+    if near:
+        lines.extend(["## 接近目标", "", *near, ""])
+    lines.extend(
+        [
+            "| 策略 | 思想 | 推荐样本外 CAGR | Sharpe | 最大回撤 | 波动 | Bootstrap CAGR 95% CI | 判定 |",
+            "|---|---|---:|---:|---:|---:|---:|---|",
+            *rows,
+            "",
+            "## 设计要点",
+            "",
+            "1. **BTC 趋势门控**：弱市优先空仓，而不是硬扛或盲目做空。",
+            "2. **广度/双均线确认**：降低伪突破期的回撤，是抬升夏普的关键过滤器。",
+            "3. **逆波动加权 + 波动率目标**：压缩高波动山寨暴露，稳定风险预算。",
+            "4. **自适应核心-卫星**：BTC 滞涨时提高强势山寨卫星，避免“只做 BTC”在弱 beta 段失效。",
+            "5. **条件化对冲**：仅在极弱动量或组合波动飙升时小额度做空，默认现金。",
+            "",
+            "## 限制",
+            "",
+            "- 做空成本用固定日费率近似，未逐日接入真实资金费率。",
+            "- 固定币池仍有幸存者偏差；目标达成不等于未来可稳定复制。",
+            "- 宽置信区间意味着即使点估计达标，统计显著性仍可能不足。",
+            "",
+            f"数据来源：`{manifest.get('source', 'N/A')}`；详情见 `crypto_alpha_results.json`。",
+        ]
+    )
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 

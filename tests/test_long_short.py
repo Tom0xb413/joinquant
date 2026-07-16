@@ -8,7 +8,12 @@ from datetime import date, timedelta
 import numpy as np
 
 from crypto_lab.backtest import run_backtest
-from crypto_lab.crypto_alpha import BtcGateAltHedge, BtcTrendTopMomentum
+from crypto_lab.crypto_alpha import (
+    BtcBreadthTopMomentum,
+    BtcGateAltHedge,
+    BtcProtectiveHedge,
+    BtcTrendTopMomentum,
+)
 from crypto_lab.data import MarketData
 from crypto_lab.long_short import LongShortLimits, run_long_short_backtest
 
@@ -79,12 +84,45 @@ class LongShortTests(unittest.TestCase):
         weights = strategy.target_weights(data, 230, np.zeros(3))
         np.testing.assert_allclose(weights, np.zeros(3))
 
-    def test_hedge_strategy_can_go_short_off_trend(self):
+    def test_hedge_strategy_can_go_short_off_trend_when_enabled(self):
         data = sample_market()
         data.close[200:, 0] = 20.0
-        strategy = BtcGateAltHedge(trend_window=100, lookback=30, rebalance_days=1, off_short_weight=0.4)
+        strategy = BtcGateAltHedge(
+            trend_window=100,
+            lookback=30,
+            rebalance_days=1,
+            off_short_weight=0.4,
+        )
         weights = strategy.target_weights(data, 230, np.zeros(3))
         self.assertLess(float(weights.sum()), 0.0)
+
+    def test_hedge_defaults_to_cash_when_btc_off(self):
+        data = sample_market()
+        data.close[200:, 0] = 20.0
+        strategy = BtcGateAltHedge(trend_window=100, lookback=30, rebalance_days=1)
+        weights = strategy.target_weights(data, 230, np.zeros(3))
+        np.testing.assert_allclose(weights, np.zeros(3))
+
+    def test_breadth_gate_can_force_cash(self):
+        data = sample_market()
+        # BTC 仍上涨，但广度阈值设得极高，应强制空仓。
+        strategy = BtcBreadthTopMomentum(
+            trend_window=50,
+            lookback=30,
+            rebalance_days=1,
+            breadth_min=0.99,
+        )
+        weights = strategy.target_weights(data, 230, np.zeros(3))
+        np.testing.assert_allclose(weights, np.zeros(3))
+
+    def test_protective_hedge_stays_finite(self):
+        result = run_long_short_backtest(
+            sample_market(),
+            BtcProtectiveHedge(trend_window=50, lookback=30, rebalance_days=7),
+            fee_rate=0.0,
+            slippage_rate=0.0,
+        )
+        self.assertTrue(np.isfinite(result.equity).all())
 
 
 if __name__ == "__main__":
