@@ -1,0 +1,594 @@
+{
+  "methodology": {
+    "signal_timing": "使用 T-1 及更早收盘数据生成权重，获取 T 日收盘到收盘收益",
+    "positioning": "仅现货多头，不加杠杆、不做空；未分配权重为零收益现金",
+    "fee_rate_one_way": 0.001,
+    "slippage_rate_one_way": 0.0005,
+    "annualization_days": 365,
+    "selection": "仅训练区间网格选参；样本外区间不参与选参",
+    "uncertainty": "样本外日收益使用 14 日循环区块 Bootstrap，2,000 次重采样",
+    "known_biases": [
+      "固定使用当前仍在 OKX 交易且历史较长的币对，存在幸存者偏差",
+      "成交量是小市值/基本面因子的代理，不等同于历史流通市值或链上财务",
+      "日线模型未模拟盘口冲击、稳定币脱锚、交易所故障和下架清算"
+    ]
+  },
+  "universe": [
+    "BTC-USDT",
+    "ETH-USDT",
+    "SOL-USDT",
+    "XRP-USDT",
+    "ADA-USDT",
+    "DOGE-USDT",
+    "LTC-USDT",
+    "BCH-USDT",
+    "LINK-USDT",
+    "DOT-USDT",
+    "ETC-USDT",
+    "TRX-USDT"
+  ],
+  "data_range": {
+    "start": "2021-01-01",
+    "end": "2026-07-15"
+  },
+  "split": {
+    "train_start": "2021-01-01",
+    "train_end": "2024-04-27",
+    "test_start": "2024-04-28",
+    "test_end": "2026-07-15",
+    "train_fraction": 0.6
+  },
+  "benchmark": {
+    "name": "BTC-USDT_buy_hold",
+    "train": {
+      "start": "2021-01-01",
+      "end": "2024-04-27",
+      "observations": 1213,
+      "total_return": 1.1599084655224785,
+      "cagr": 0.26076424606115967,
+      "annual_volatility": 0.6428797250695713,
+      "sharpe": 0.6817726551054711,
+      "max_drawdown": 0.7662572880306725,
+      "calmar": 0.340308992990252,
+      "turnover": 1.0,
+      "cost_paid": 0.0015
+    },
+    "test": {
+      "start": "2024-04-28",
+      "end": "2026-07-15",
+      "observations": 809,
+      "total_return": 0.02049007248660417,
+      "cagr": 0.009193156743553255,
+      "annual_volatility": 0.4596050136935271,
+      "sharpe": 0.24868907281722433,
+      "max_drawdown": 0.5297458150521758,
+      "calmar": 0.017353901592687054,
+      "turnover": 0.0,
+      "cost_paid": 0.0
+    }
+  },
+  "strategies": {
+    "trend_rotation": {
+      "source_ids": [
+        "01"
+      ],
+      "candidates_tested": 12,
+      "selection_objective": "train_sharpe - 0.5 * train_max_drawdown",
+      "default_parameters": {
+        "lookback": 20,
+        "short_window": 5,
+        "top_k": 2,
+        "rank_limit": 4,
+        "min_return": 0.03,
+        "max_return": 0.3
+      },
+      "selected_parameters": {
+        "lookback": 20,
+        "short_window": 5,
+        "top_k": 3,
+        "rank_limit": 4,
+        "min_return": 0.03,
+        "max_return": 0.3
+      },
+      "default_train": {
+        "start": "2021-01-01",
+        "end": "2024-04-27",
+        "observations": 1213,
+        "total_return": 2.0811260504584266,
+        "cagr": 0.40299467375062137,
+        "annual_volatility": 0.7868092155683877,
+        "sharpe": 0.8190312064667028,
+        "max_drawdown": 0.6461474229113349,
+        "calmar": 0.6236884331053361,
+        "turnover": 487.7661354790755,
+        "cost_paid": 0.7316492032186132
+      },
+      "default_test": {
+        "start": "2024-04-28",
+        "end": "2026-07-15",
+        "observations": 809,
+        "total_return": -0.4525056848986103,
+        "cagr": -0.23798484567313682,
+        "annual_volatility": 0.657289017132761,
+        "sharpe": -0.10928318538814913,
+        "max_drawdown": 0.7954074049469676,
+        "calmar": -0.2991986800638398,
+        "turnover": 284.3498846928152,
+        "cost_paid": 0.4265248270392228
+      },
+      "optimized_train": {
+        "start": "2021-01-01",
+        "end": "2024-04-27",
+        "observations": 1213,
+        "total_return": 2.3209134860031972,
+        "cagr": 0.4349936097008118,
+        "annual_volatility": 0.7704957291678823,
+        "sharpe": 0.8520324024473208,
+        "max_drawdown": 0.6702059013979802,
+        "calmar": 0.6490447320643703,
+        "turnover": 526.4288604944732,
+        "cost_paid": 0.7896432907417098
+      },
+      "optimized_test": {
+        "start": "2024-04-28",
+        "end": "2026-07-15",
+        "observations": 809,
+        "total_return": -0.487166996485519,
+        "cagr": -0.2601415933501632,
+        "annual_volatility": 0.587575990319676,
+        "sharpe": -0.22665940766867126,
+        "max_drawdown": 0.8050452696675169,
+        "calmar": -0.3231390868958232,
+        "turnover": 310.1374061993649,
+        "cost_paid": 0.4652061092990474,
+        "oos_positive": false,
+        "default_oos_positive": false,
+        "risk_adjusted_better_than_btc": false
+      },
+      "optimized_test_bootstrap": {
+        "method": "circular_block_bootstrap",
+        "block_days": 14,
+        "samples": 2000,
+        "cagr_ci_95": [
+          -0.6578336621939783,
+          0.7822689926931878
+        ],
+        "cagr_median": -0.26530766416961327,
+        "positive_resample_fraction": 0.235
+      },
+      "cross_market_verdict": "未通过"
+    },
+    "all_weather_rotation": {
+      "source_ids": [
+        "02"
+      ],
+      "candidates_tested": 6,
+      "selection_objective": "train_sharpe - 0.5 * train_max_drawdown",
+      "default_parameters": {
+        "regime_window": 20,
+        "top_k": 4,
+        "rebalance_days": 30
+      },
+      "selected_parameters": {
+        "regime_window": 40,
+        "top_k": 3,
+        "rebalance_days": 30
+      },
+      "default_train": {
+        "start": "2021-01-01",
+        "end": "2024-04-27",
+        "observations": 1213,
+        "total_return": 2.001608982936706,
+        "cagr": 0.39199963034324004,
+        "annual_volatility": 0.7007475826967587,
+        "sharpe": 0.8219712462814367,
+        "max_drawdown": 0.7834649634183573,
+        "calmar": 0.5003409835111142,
+        "turnover": 34.172511932503475,
+        "cost_paid": 0.051258767898755206
+      },
+      "default_test": {
+        "start": "2024-04-28",
+        "end": "2026-07-15",
+        "observations": 809,
+        "total_return": -0.5982528742066108,
+        "cagr": -0.3373050268448262,
+        "annual_volatility": 0.404508844799259,
+        "sharpe": -0.8136588397515714,
+        "max_drawdown": 0.6430207959737759,
+        "calmar": -0.5245631695846155,
+        "turnover": 18.678657055773552,
+        "cost_paid": 0.02801798558366033
+      },
+      "optimized_train": {
+        "start": "2021-01-01",
+        "end": "2024-04-27",
+        "observations": 1213,
+        "total_return": 7.463449873302652,
+        "cagr": 0.9015395704072957,
+        "annual_volatility": 0.771055089125534,
+        "sharpe": 1.2113398536681887,
+        "max_drawdown": 0.6652334037719814,
+        "calmar": 1.3552229417455888,
+        "turnover": 28.432990989470007,
+        "cost_paid": 0.04264948648420501
+      },
+      "optimized_test": {
+        "start": "2024-04-28",
+        "end": "2026-07-15",
+        "observations": 809,
+        "total_return": 0.28743140038850923,
+        "cagr": 0.12073953328797904,
+        "annual_volatility": 0.430058811134054,
+        "sharpe": 0.4784487032239622,
+        "max_drawdown": 0.5521940381673012,
+        "calmar": 0.21865417759435848,
+        "turnover": 17.742827214442066,
+        "cost_paid": 0.026614240821663103,
+        "oos_positive": true,
+        "default_oos_positive": false,
+        "risk_adjusted_better_than_btc": false
+      },
+      "optimized_test_bootstrap": {
+        "method": "circular_block_bootstrap",
+        "block_days": 14,
+        "samples": 2000,
+        "cagr_ci_95": [
+          -0.4256905325135918,
+          1.406555263839538
+        ],
+        "cagr_median": 0.10630767344024902,
+        "positive_resample_fraction": 0.6125
+      },
+      "cross_market_verdict": "点估计为正（无统计支持）"
+    },
+    "small_liquidity_rotation": {
+      "source_ids": [
+        "03",
+        "04",
+        "06",
+        "10-A"
+      ],
+      "candidates_tested": 8,
+      "selection_objective": "train_sharpe - 0.5 * train_max_drawdown",
+      "default_parameters": {
+        "liquidity_window": 30,
+        "liquid_pool": 10,
+        "top_k": 5,
+        "regime_window": 80
+      },
+      "selected_parameters": {
+        "liquidity_window": 20,
+        "liquid_pool": 10,
+        "top_k": 4,
+        "regime_window": 50
+      },
+      "default_train": {
+        "start": "2021-01-01",
+        "end": "2024-04-27",
+        "observations": 1213,
+        "total_return": 5.508628349629174,
+        "cagr": 0.7570517340890515,
+        "annual_volatility": 0.603909222863585,
+        "sharpe": 1.229514835513227,
+        "max_drawdown": 0.5209579185995216,
+        "calmar": 1.453191720598499,
+        "turnover": 67.2218869166081,
+        "cost_paid": 0.10083283037491217
+      },
+      "default_test": {
+        "start": "2024-04-28",
+        "end": "2026-07-15",
+        "observations": 809,
+        "total_return": -0.29758783447343795,
+        "cagr": -0.14731962834965373,
+        "annual_volatility": 0.43367892912673556,
+        "sharpe": -0.1470560163467382,
+        "max_drawdown": 0.5946736562453881,
+        "calmar": -0.2477318892513094,
+        "turnover": 50.29785794445152,
+        "cost_paid": 0.07544678691667728
+      },
+      "optimized_train": {
+        "start": "2021-01-01",
+        "end": "2024-04-27",
+        "observations": 1213,
+        "total_return": 11.480393597137784,
+        "cagr": 1.137285754237559,
+        "annual_volatility": 0.6578630764079161,
+        "sharpe": 1.47332180268777,
+        "max_drawdown": 0.4098704348865342,
+        "calmar": 2.774744547145484,
+        "turnover": 84.65996572007225,
+        "cost_paid": 0.12698994858010837
+      },
+      "optimized_test": {
+        "start": "2024-04-28",
+        "end": "2026-07-15",
+        "observations": 809,
+        "total_return": -0.3044466774204384,
+        "cagr": -0.15108629763957282,
+        "annual_volatility": 0.4269978331840469,
+        "sharpe": -0.16815456962786063,
+        "max_drawdown": 0.6266621630883482,
+        "calmar": -0.24109688846536015,
+        "turnover": 58.07113591005417,
+        "cost_paid": 0.08710670386508126,
+        "oos_positive": false,
+        "default_oos_positive": false,
+        "risk_adjusted_better_than_btc": false
+      },
+      "optimized_test_bootstrap": {
+        "method": "circular_block_bootstrap",
+        "block_days": 14,
+        "samples": 2000,
+        "cagr_ci_95": [
+          -0.5507635197597702,
+          0.6397057044897144
+        ],
+        "cagr_median": -0.1543590950466854,
+        "positive_resample_fraction": 0.3135
+      },
+      "cross_market_verdict": "未通过"
+    },
+    "composite_factor_rotation": {
+      "source_ids": [
+        "05",
+        "07",
+        "10-C",
+        "10-D",
+        "11",
+        "12"
+      ],
+      "candidates_tested": 9,
+      "selection_objective": "train_sharpe - 0.5 * train_max_drawdown",
+      "default_parameters": {
+        "top_k": 5,
+        "regime_window": 100
+      },
+      "selected_parameters": {
+        "top_k": 7,
+        "regime_window": 50
+      },
+      "default_train": {
+        "start": "2021-01-01",
+        "end": "2024-04-27",
+        "observations": 1213,
+        "total_return": 1.3500626135988805,
+        "cagr": 0.2931840536800674,
+        "annual_volatility": 0.5182610028541301,
+        "sharpe": 0.754272273386614,
+        "max_drawdown": 0.5881598696421698,
+        "calmar": 0.4984768067539824,
+        "turnover": 57.35161309372263,
+        "cost_paid": 0.08602741964058394
+      },
+      "default_test": {
+        "start": "2024-04-28",
+        "end": "2026-07-15",
+        "observations": 809,
+        "total_return": -0.048186618338499576,
+        "cagr": -0.022035418436592624,
+        "annual_volatility": 0.4449289856400654,
+        "sharpe": 0.17296618654111764,
+        "max_drawdown": 0.5238453851109119,
+        "calmar": -0.04206473715889879,
+        "turnover": 43.04216014987907,
+        "cost_paid": 0.0645632402248186
+      },
+      "optimized_train": {
+        "start": "2021-01-01",
+        "end": "2024-04-27",
+        "observations": 1213,
+        "total_return": 10.737684800861876,
+        "cagr": 1.0981893376449405,
+        "annual_volatility": 0.5541396923480252,
+        "sharpe": 1.608773957872654,
+        "max_drawdown": 0.3598763110417377,
+        "calmar": 3.051574399176207,
+        "turnover": 55.47841245255839,
+        "cost_paid": 0.08321761867883758
+      },
+      "optimized_test": {
+        "start": "2024-04-28",
+        "end": "2026-07-15",
+        "observations": 809,
+        "total_return": -0.1770119228239755,
+        "cagr": -0.08414284603510092,
+        "annual_volatility": 0.4317033204475584,
+        "sharpe": 0.014504051165030733,
+        "max_drawdown": 0.5907010068694263,
+        "calmar": -0.14244574675949484,
+        "turnover": 46.880294359383214,
+        "cost_paid": 0.07032044153907482,
+        "oos_positive": false,
+        "default_oos_positive": false,
+        "risk_adjusted_better_than_btc": false
+      },
+      "optimized_test_bootstrap": {
+        "method": "circular_block_bootstrap",
+        "block_days": 14,
+        "samples": 2000,
+        "cagr_ci_95": [
+          -0.5440562754635662,
+          0.9060115300412317
+        ],
+        "cagr_median": -0.09348898871841937,
+        "positive_resample_fraction": 0.388
+      },
+      "cross_market_verdict": "未通过"
+    },
+    "rsi_factor_rotation": {
+      "source_ids": [
+        "08"
+      ],
+      "candidates_tested": 8,
+      "selection_objective": "train_sharpe - 0.5 * train_max_drawdown",
+      "default_parameters": {
+        "top_k": 6,
+        "entry_rsi": 55.0,
+        "exit_rsi": 72.0,
+        "rebalance_days": 30
+      },
+      "selected_parameters": {
+        "top_k": 4,
+        "entry_rsi": 55.0,
+        "exit_rsi": 65.0,
+        "rebalance_days": 30
+      },
+      "default_train": {
+        "start": "2021-01-01",
+        "end": "2024-04-27",
+        "observations": 1213,
+        "total_return": 0.044930933738012824,
+        "cagr": 0.013312932130876698,
+        "annual_volatility": 0.5488995033033855,
+        "sharpe": 0.30022940641541973,
+        "max_drawdown": 0.6344400452795103,
+        "calmar": 0.020983751309411002,
+        "turnover": 49.53794953829723,
+        "cost_paid": 0.07430692430744583
+      },
+      "default_test": {
+        "start": "2024-04-28",
+        "end": "2026-07-15",
+        "observations": 809,
+        "total_return": -0.4437051465952465,
+        "cagr": -0.23248268227740232,
+        "annual_volatility": 0.5069277341511219,
+        "sharpe": -0.2695790147789405,
+        "max_drawdown": 0.548207122973086,
+        "calmar": -0.4240781860268093,
+        "turnover": 31.020355374473862,
+        "cost_paid": 0.04653053306171079
+      },
+      "optimized_train": {
+        "start": "2021-01-01",
+        "end": "2024-04-27",
+        "observations": 1213,
+        "total_return": 0.33069437609061203,
+        "cagr": 0.08977293029328792,
+        "annual_volatility": 0.4767710782443372,
+        "sharpe": 0.41964974239425634,
+        "max_drawdown": 0.6307313555166463,
+        "calmar": 0.14233148472498705,
+        "turnover": 57.084391603220425,
+        "cost_paid": 0.08562658740483065
+      },
+      "optimized_test": {
+        "start": "2024-04-28",
+        "end": "2026-07-15",
+        "observations": 809,
+        "total_return": -0.29775967001765313,
+        "cagr": -0.14741374809512542,
+        "annual_volatility": 0.37781340802607016,
+        "sharpe": -0.23143206132482713,
+        "max_drawdown": 0.49865767742460687,
+        "calmar": -0.2956211340342057,
+        "turnover": 39.76953816682693,
+        "cost_paid": 0.059654307250240415,
+        "oos_positive": false,
+        "default_oos_positive": false,
+        "risk_adjusted_better_than_btc": false
+      },
+      "optimized_test_bootstrap": {
+        "method": "circular_block_bootstrap",
+        "block_days": 14,
+        "samples": 2000,
+        "cagr_ci_95": [
+          -0.44914156950848977,
+          0.2555698719686313
+        ],
+        "cagr_median": -0.14421935469092334,
+        "positive_resample_fraction": 0.2325
+      },
+      "cross_market_verdict": "未通过"
+    },
+    "rolling_ridge_rotation": {
+      "source_ids": [
+        "09"
+      ],
+      "candidates_tested": 12,
+      "selection_objective": "train_sharpe - 0.5 * train_max_drawdown",
+      "default_parameters": {
+        "top_k": 5,
+        "horizon": 7,
+        "train_window": 365,
+        "ridge": 1.0
+      },
+      "selected_parameters": {
+        "top_k": 3,
+        "horizon": 7,
+        "train_window": 180,
+        "ridge": 10.0
+      },
+      "default_train": {
+        "start": "2021-01-01",
+        "end": "2024-04-27",
+        "observations": 1213,
+        "total_return": -0.5573130359353734,
+        "cagr": -0.2174572260863662,
+        "annual_volatility": 0.7757654461732414,
+        "sharpe": 0.07934845195395447,
+        "max_drawdown": 0.8954346110179141,
+        "calmar": -0.24285103949596576,
+        "turnover": 134.5776303636942,
+        "cost_paid": 0.20186644554554134
+      },
+      "default_test": {
+        "start": "2024-04-28",
+        "end": "2026-07-15",
+        "observations": 809,
+        "total_return": -0.014300448280345823,
+        "cagr": -0.006477502330023199,
+        "annual_volatility": 0.6474805174504701,
+        "sharpe": 0.31217632400548867,
+        "max_drawdown": 0.7066019685703624,
+        "calmar": -0.009167116167435612,
+        "turnover": 84.2401156392452,
+        "cost_paid": 0.12636017345886782
+      },
+      "optimized_train": {
+        "start": "2021-01-01",
+        "end": "2024-04-27",
+        "observations": 1213,
+        "total_return": 0.15539340707437588,
+        "cagr": 0.04442161591698546,
+        "annual_volatility": 0.834566474034906,
+        "sharpe": 0.4748759476323201,
+        "max_drawdown": 0.8176493686741744,
+        "calmar": 0.05432844152869035,
+        "turnover": 157.5833885204128,
+        "cost_paid": 0.2363750827806192
+      },
+      "optimized_test": {
+        "start": "2024-04-28",
+        "end": "2026-07-15",
+        "observations": 809,
+        "total_return": -0.5733814895337596,
+        "cagr": -0.31909986174565863,
+        "annual_volatility": 0.6262392693596895,
+        "sharpe": -0.29993963423466813,
+        "max_drawdown": 0.7154770700851154,
+        "calmar": -0.44599593067000387,
+        "turnover": 115.02837731679142,
+        "cost_paid": 0.17254256597518713,
+        "oos_positive": false,
+        "default_oos_positive": false,
+        "risk_adjusted_better_than_btc": false
+      },
+      "optimized_test_bootstrap": {
+        "method": "circular_block_bootstrap",
+        "block_days": 14,
+        "samples": 2000,
+        "cagr_ci_95": [
+          -0.6798388263067847,
+          0.408622030016535
+        ],
+        "cagr_median": -0.3172529128522239,
+        "positive_resample_fraction": 0.1495
+      },
+      "cross_market_verdict": "未通过"
+    }
+  }
+}

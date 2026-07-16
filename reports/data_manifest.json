@@ -1,0 +1,116 @@
+{
+  "source": "https://www.okx.com/api/v5/market/history-candles",
+  "bar": "1Dutc",
+  "tool_version": "0.1.0",
+  "runtime": {
+    "python": "3.12.3",
+    "numpy": "2.4.4",
+    "platform": "Linux-6.12.94+-x86_64-with-glibc2.39"
+  },
+  "generated_at_utc": "2026-07-16T08:00:38.558327+00:00",
+  "files": [
+    {
+      "symbol": "BTC-USDT",
+      "rows": 2022,
+      "start": "2021-01-01",
+      "end": "2026-07-15",
+      "sha256": "47ddc4d5f13725daf36cdd7e7472c22be58e1ff0d51842928bc76655506f26ea"
+    },
+    {
+      "symbol": "ETH-USDT",
+      "rows": 2022,
+      "start": "2021-01-01",
+      "end": "2026-07-15",
+      "sha256": "d532902baa033c287baec9462eb96206b634f3b10d850463eeb412f99b5aab35"
+    },
+    {
+      "symbol": "SOL-USDT",
+      "rows": 2022,
+      "start": "2021-01-01",
+      "end": "2026-07-15",
+      "sha256": "b2b604e32500d15ce04f24e42f55e9f60a20ba6c26171caa329d3568e14e6cae"
+    },
+    {
+      "symbol": "XRP-USDT",
+      "rows": 2022,
+      "start": "2021-01-01",
+      "end": "2026-07-15",
+      "sha256": "c505973af2708b8f43bd0e9852c1bc8e7798ab23fc65b629fd9282d1be0e94c9"
+    },
+    {
+      "symbol": "ADA-USDT",
+      "rows": 2022,
+      "start": "2021-01-01",
+      "end": "2026-07-15",
+      "sha256": "c83172bca9bac5728a34341623bd23b76e8b38d98dbd3d3c1b3cb3fbfe949f05"
+    },
+    {
+      "symbol": "DOGE-USDT",
+      "rows": 2022,
+      "start": "2021-01-01",
+      "end": "2026-07-15",
+      "sha256": "b7afc341613510d8ef6c96d7e58c084412e6e68492512551794f50d7fe09f843"
+    },
+    {
+      "symbol": "LTC-USDT",
+      "rows": 2022,
+      "start": "2021-01-01",
+      "end": "2026-07-15",
+      "sha256": "0a3f43280245c484505c70ef11d9c3bf7ee2f5fddd615e5b64a2c756242a68db"
+    },
+    {
+      "symbol": "BCH-USDT",
+      "rows": 2022,
+      "start": "2021-01-01",
+      "end": "2026-07-15",
+      "sha256": "91161002d3fdd8ed16fc8a97b4bd6be78256bbefd9f566296e3dea5d4fe293d9"
+    },
+    {
+      "symbol": "LINK-USDT",
+      "rows": 2022,
+      "start": "2021-01-01",
+      "end": "2026-07-15",
+      "sha256": "f003835d6028d8d242e24fba43b1419ba3fb23beb2cda24bc542d9546e5d6a8e"
+    },
+    {
+      "symbol": "DOT-USDT",
+      "rows": 2022,
+      "start": "2021-01-01",
+      "end": "2026-07-15",
+      "sha256": "014419f2a9aeb83d0310522c212c6c595ff0149f0d186402995d022e6e47ecc6"
+    },
+    {
+      "symbol": "ETC-USDT",
+      "rows": 2022,
+      "start": "2021-01-01",
+      "end": "2026-07-15",
+      "sha256": "59d9ea8bb7af92000c5956291ed7ab24cdc2f630b362b4a8d7e6a36631fa4865"
+    },
+    {
+      "symbol": "TRX-USDT",
+      "rows": 2022,
+      "start": "2021-01-01",
+      "end": "2026-07-15",
+      "sha256": "ed24024d030e81379a71897a10cf527a7465277d054856e40cb3cfacd103caed"
+    }
+  ],
+  "request": {
+    "command": "python3 -m crypto_lab.cli download --start 2021-01-01 --end 2026-07-15 --symbols BTC-USDT ETH-USDT SOL-USDT XRP-USDT ADA-USDT DOGE-USDT LTC-USDT BCH-USDT LINK-USDT DOT-USDT ETC-USDT TRX-USDT",
+    "start": "2021-01-01",
+    "end": "2026-07-15",
+    "symbols": [
+      "BTC-USDT",
+      "ETH-USDT",
+      "SOL-USDT",
+      "XRP-USDT",
+      "ADA-USDT",
+      "DOGE-USDT",
+      "LTC-USDT",
+      "BCH-USDT",
+      "LINK-USDT",
+      "DOT-USDT",
+      "ETC-USDT",
+      "TRX-USDT"
+    ]
+  }
+}
