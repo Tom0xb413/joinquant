@@ -23,6 +23,7 @@
 python3 -m crypto_lab.cli download --start 2021-01-01 --end 2026-07-15
 python3 -m crypto_lab.cli research
 python3 -m crypto_lab.cli optimize
+python3 -m crypto_lab.cli crypto-alpha
 python3 -m unittest discover -s tests -v
 ```
 
@@ -30,6 +31,8 @@ python3 -m unittest discover -s tests -v
 
 - `reports/cross_market_report.md`：首轮迁移原型样本外结论；
 - `reports/optimized_strategies_report.md`：低换手优化策略设计与验证；
+- `reports/crypto_alpha_report.md`：BTC门控/轮动/对冲增强，冲击年化15%+夏普1+；
+- `reports/crypto_alpha_results.json`：增强策略参数与目标达成明细；
 - `reports/optimized_backtest_results.json`：优化策略全部参数及训练/样本外指标；
 - `reports/backtest_results.json`：首轮策略参数及训练/样本外指标；
 - `reports/data_manifest.json`：数据来源、日期范围、行数和 SHA-256。

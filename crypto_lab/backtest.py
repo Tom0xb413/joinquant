@@ -174,6 +174,6 @@ def _drift_weights(weights: np.ndarray, returns: np.ndarray, portfolio_return: f
     if denominator <= 0:
         return np.zeros_like(weights)
     drifted = weights * (1.0 + returns) / denominator
-    drifted[drifted < 1e-14] = 0.0
+    drifted[np.abs(drifted) < 1e-14] = 0.0
     return drifted
 
