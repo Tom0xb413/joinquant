@@ -19,7 +19,7 @@ class ResearchTests(unittest.TestCase):
             samples=100,
             seed=7,
         )
-        self.assertEqual(summary["probability_cagr_positive"], 1.0)
+        self.assertEqual(summary["positive_resample_fraction"], 1.0)
         self.assertGreater(summary["cagr_ci_95"][0], 0)
         self.assertEqual(summary["samples"], 100)
 

@@ -5,6 +5,8 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import platform
+import sys
 import time
 import urllib.parse
 import urllib.request
@@ -230,6 +232,12 @@ def dataset_manifest(data_dir: Path, symbols: Iterable[str]) -> dict:
     return {
         "source": OkxDataClient.endpoint,
         "bar": "1Dutc",
+        "tool_version": "0.1.0",
+        "runtime": {
+            "python": sys.version.split()[0],
+            "numpy": np.__version__,
+            "platform": platform.platform(),
+        },
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "files": files,
     }

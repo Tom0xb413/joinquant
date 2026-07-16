@@ -2,6 +2,4 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .venv/
-data/okx/*.csv
-data/okx/data_manifest.json
 

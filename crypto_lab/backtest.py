@@ -58,8 +58,9 @@ class BacktestResult:
         cagr = float(equity[-1] ** (1.0 / years) - 1.0) if equity[-1] > 0 else -1.0
         volatility = float(np.std(returns, ddof=1) * np.sqrt(365.0))
         sharpe = float(np.mean(returns) / np.std(returns, ddof=1) * np.sqrt(365.0)) if volatility else 0.0
-        peaks = np.maximum.accumulate(equity)
-        drawdowns = equity / peaks - 1.0
+        anchored_equity = np.concatenate(([1.0], equity))
+        peaks = np.maximum.accumulate(anchored_equity)
+        drawdowns = anchored_equity / peaks - 1.0
         max_drawdown = float(-np.min(drawdowns))
         calmar = cagr / max_drawdown if max_drawdown > 1e-12 else 0.0
         return PerformanceMetrics(
@@ -109,7 +110,7 @@ def run_backtest(
         costs[index] = turnover[index] * cost_rate
         asset_returns = data.close[index] / data.close[index - 1] - 1.0
         gross_return = float(target @ asset_returns)
-        daily_returns[index] = max(gross_return - costs[index], -1.0)
+        daily_returns[index] = max((1.0 + gross_return) * (1.0 - costs[index]) - 1.0, -1.0)
         weights[index] = target
         current = _drift_weights(target, asset_returns, gross_return)
 

@@ -116,11 +116,11 @@ def run_research(
         )
         optimized_positive = optimized_test["cagr"] > 0 and optimized_test["sharpe"] > 0
         default_positive = default_test["cagr"] > 0 and default_test["sharpe"] > 0
-        statistically_supported = bootstrap["probability_cagr_positive"] >= 0.95
+        statistically_supported = bootstrap["cagr_ci_95"][0] > 0
         verdict = (
             "统计通过"
             if optimized_positive and default_positive and statistically_supported
-            else "有限通过"
+            else "点估计为正（无统计支持）"
             if optimized_positive
             else "未通过"
         )
@@ -197,7 +197,7 @@ def write_markdown_report(path: Path, results: dict[str, Any], manifest: dict[st
     split = results["split"]
     benchmark = results["benchmark"]["test"]
     rows = []
-    verdict_counts = {"统计通过": 0, "有限通过": 0, "未通过": 0}
+    verdict_counts = {"统计通过": 0, "点估计为正（无统计支持）": 0, "未通过": 0}
     for name, item in results["strategies"].items():
         metrics = item["optimized_test"]
         default_metrics = item["default_test"]
@@ -223,16 +223,16 @@ def write_markdown_report(path: Path, results: dict[str, Any], manifest: dict[st
         "",
         "## 结论",
         "",
-        "本报告中的“有效”仅表示迁移后的 Crypto 版本在锁定参数后的样本外区间 CAGR 与 Sharpe 同时为正，",
-        "不代表原聚宽收益声明已被复现，也不构成实盘收益承诺。",
+        "本报告评价的是受聚宽策略启发、重新设计后的 Crypto 原型，不把合并后的原型收益归因给任一原策略。",
+        "原聚宽收益声明没有逐日净值可复现，因此不能据此认定原策略跨市场有效，也不构成实盘收益承诺。",
         "",
         f"- 训练区间：`{split['train_start']}` 至 `{split['train_end']}`",
         f"- 样本外区间：`{split['test_start']}` 至 `{split['test_end']}`",
         f"- BTC 样本外：CAGR `{benchmark['cagr']:.1%}`，Sharpe `{benchmark['sharpe']:.2f}`，最大回撤 `{benchmark['max_drawdown']:.1%}`",
         f"- 成本假设：单边手续费 `{results['methodology']['fee_rate_one_way']:.2%}` + 单边滑点 `{results['methodology']['slippage_rate_one_way']:.2%}`",
-        f"- 判定汇总：统计通过 `{verdict_counts['统计通过']}`，有限通过 `{verdict_counts['有限通过']}`，未通过 `{verdict_counts['未通过']}`。",
+        f"- 判定汇总：统计通过 `{verdict_counts['统计通过']}`，点估计为正但无统计支持 `{verdict_counts['点估计为正（无统计支持）']}`，未通过 `{verdict_counts['未通过']}`。",
         "",
-        "| Crypto 策略族 | 对应原策略 | 默认参数 CAGR | 优化参数 CAGR | Sharpe | 最大回撤 | 区块 Bootstrap CAGR 95% CI | 判定 |",
+        "| Crypto 策略族 | 借鉴来源 | 默认参数 CAGR | 优化参数 CAGR | Sharpe | 最大回撤 | 区块 Bootstrap CAGR 95% CI | 判定 |",
         "|---|---:|---:|---:|---:|---:|---:|---:|",
         *rows,
         "",
@@ -257,13 +257,13 @@ def write_markdown_report(path: Path, results: dict[str, Any], manifest: dict[st
         "## 方法",
         "",
         "1. 所有信号只读取 T-1 及更早数据，持有 T 日 close-to-close 收益。",
-        "2. 前 60% 时间段执行有限网格优化，后 40% 完全留作样本外评价。",
+        "2. 前 60% 时间段执行有限网格优化，后 40% 不参与参数选择；固定币池仍含测试期末幸存者偏差。",
         "3. 每次目标权重变化按绝对权重变化计交易成本；现金收益按 0 处理。",
         "4. 对样本外日收益进行 14 日区块 Bootstrap（2,000 次），保留收益自相关后估计 CAGR 置信区间。",
         "5. 以 BTC 买入持有作为统一基准，Crypto 按 365 天年化。",
         "",
-        "判定规则：优化参数与默认参数均为正，且 Bootstrap 中 CAGR 为正的概率至少 95%，才记为“统计通过”；",
-        "仅优化参数为正记为“有限通过”；其余为“未通过”。",
+        "判定规则：优化参数与默认参数均为正，且区块 Bootstrap CAGR 95% 置信区间下界大于 0，才记为“统计通过”；",
+        "仅优化参数点估计为正记为“点估计为正（无统计支持）”；其余为“未通过”。",
         "",
         "## 限制",
         "",
@@ -321,6 +321,6 @@ def _block_bootstrap_cagr(
         "samples": samples,
         "cagr_ci_95": [float(lower), float(upper)],
         "cagr_median": float(median),
-        "probability_cagr_positive": float(np.mean(cagrs > 0)),
+        "positive_resample_fraction": float(np.mean(cagrs > 0)),
     }
 

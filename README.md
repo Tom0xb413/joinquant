@@ -2,9 +2,9 @@
 
 本仓库保留 12 份聚宽 A 股原始策略，并提供一个仅依赖 NumPy 的研究框架，将其中可跨市场验证的结构迁移到 Crypto。框架直接下载 OKX 公开现货日 K，使用严格的 T-1 信号、真实交易成本、时间序列切分和样本外评价。
 
-## 策略映射
+## 策略原型与借鉴来源
 
-| Crypto 策略族 | 聚宽来源 | 核心迁移 |
+| Crypto 策略族 | 聚宽借鉴来源 | 核心迁移 |
 |---|---|---|
 | `trend_rotation` | 01 | 多标的均线 + 动量 Top-K |
 | `all_weather_rotation` | 02 | 主流币/山寨币/现金风险状态轮动 |
@@ -20,7 +20,7 @@
 环境要求：Python 3.10+、NumPy 2.4.4+。
 
 ```bash
-python3 -m crypto_lab.cli download --start 2021-01-01
+python3 -m crypto_lab.cli download --start 2021-01-01 --end 2026-07-15
 python3 -m crypto_lab.cli research
 python3 -m unittest discover -s tests -v
 ```
@@ -31,7 +31,7 @@ python3 -m unittest discover -s tests -v
 - `reports/backtest_results.json`：全部参数及训练/样本外指标；
 - `reports/data_manifest.json`：数据来源、日期范围、行数和 SHA-256。
 
-原始 CSV 默认不提交 Git，运行下载命令可从 OKX 复现。
+仓库包含本次报告使用的原始 CSV 快照；上述固定起止日期命令可重新下载并核对清单中的 SHA-256。
 
 ## 回测约束
 
@@ -43,4 +43,4 @@ python3 -m unittest discover -s tests -v
 
 ## 重要限制
 
-固定使用当前仍在 OKX 交易的长历史币对，存在幸存者偏差。成交量并非历史流通市值，也不能替代协议收入、TVL 或链上审计。本项目验证的是“迁移后结构”在 Crypto 历史行情上的表现，不是对原策略宣传收益的复现，更不是实盘收益保证。
+固定使用当前仍在 OKX 交易的长历史币对，存在测试期末幸存者偏差。成交量并非历史流通市值，也不能替代协议收入、TVL 或链上审计。本项目评价的是受原策略启发而重新设计的 Crypto 原型，不把原型收益归因给任一原策略，也不是对原策略宣传收益的复现或实盘收益保证。

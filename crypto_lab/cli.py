@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 from .data import (
@@ -77,8 +77,14 @@ def _download(args: argparse.Namespace) -> int:
         if path.exists() and not args.refresh:
             existing = load_candles(path)
             if existing:
-                existing_start = date.fromtimestamp(existing[0].timestamp_ms / 1000)
-                existing_end = date.fromtimestamp(existing[-1].timestamp_ms / 1000)
+                existing_start = datetime.fromtimestamp(
+                    existing[0].timestamp_ms / 1000,
+                    tz=timezone.utc,
+                ).date()
+                existing_end = datetime.fromtimestamp(
+                    existing[-1].timestamp_ms / 1000,
+                    tz=timezone.utc,
+                ).date()
                 if existing_start <= args.start and existing_end >= args.end:
                     print(f"[cache] {symbol}: {len(existing)} rows")
                     continue
@@ -88,6 +94,16 @@ def _download(args: argparse.Namespace) -> int:
         save_candles(path, candles)
         print(f"[okx] {symbol}: {len(candles)} rows")
     manifest = dataset_manifest(args.data_dir, args.symbols)
+    manifest["request"] = {
+        "command": (
+            "python3 -m crypto_lab.cli download "
+            f"--start {args.start.isoformat()} --end {args.end.isoformat()} "
+            f"--symbols {' '.join(args.symbols)}"
+        ),
+        "start": args.start.isoformat(),
+        "end": args.end.isoformat(),
+        "symbols": list(args.symbols),
+    }
     (args.data_dir / "data_manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
@@ -103,7 +119,12 @@ def _research(args: argparse.Namespace) -> int:
         for symbol in args.symbols
     }
     data = align_market_data(series)
-    manifest = dataset_manifest(args.data_dir, args.symbols)
+    cached_manifest = args.data_dir / "data_manifest.json"
+    manifest = (
+        json.loads(cached_manifest.read_text(encoding="utf-8"))
+        if cached_manifest.exists()
+        else dataset_manifest(args.data_dir, args.symbols)
+    )
     results = run_research(
         data,
         fee_rate=args.fee_rate,

@@ -70,10 +70,13 @@ class AllWeatherRotation:
 
     regime_window: int = 20
     top_k: int = 4
+    rebalance_days: int = 30
     name: str = "all_weather_rotation"
     source_ids: tuple[str, ...] = ("02",)
 
     def target_weights(self, data: MarketData, signal_index: int, previous: np.ndarray) -> np.ndarray:
+        if signal_index % self.rebalance_days != 0:
+            return previous
         momentum = trailing_return(data.close, signal_index, self.regime_window)
         if not np.isfinite(momentum).all():
             return np.zeros(len(data.symbols))

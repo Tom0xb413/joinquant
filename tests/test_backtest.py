@@ -55,6 +55,7 @@ class BacktestTests(unittest.TestCase):
         result = run_backtest(market_data(), FixedStrategy(), fee_rate=0.001, slippage_rate=0.0005)
         self.assertAlmostEqual(result.turnover[1], 1.0)
         self.assertAlmostEqual(result.costs[1], 0.0015)
+        self.assertAlmostEqual(result.daily_returns[1], (1.0 + 0.1) * (1.0 - 0.0015) - 1.0)
         self.assertLess(result.costs[2], 1e-12)
 
     def test_leverage_is_rejected(self):
@@ -67,6 +68,11 @@ class BacktestTests(unittest.TestCase):
         self.assertEqual(metrics.observations, 3)
         self.assertEqual(metrics.start, "2024-01-02")
         self.assertEqual(metrics.end, "2024-01-04")
+
+    def test_metrics_drawdown_includes_initial_equity_anchor(self):
+        result = run_backtest(market_data(), FixedStrategy(), fee_rate=0.0, slippage_rate=0.0)
+        metrics = result.metrics(date(2024, 1, 3), date(2024, 1, 4))
+        self.assertAlmostEqual(metrics.max_drawdown, 0.1)
 
 
 if __name__ == "__main__":
