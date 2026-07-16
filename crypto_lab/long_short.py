@@ -17,7 +17,7 @@ class LongShortLimits:
 
     max_gross_exposure: float = 1.5
     max_net_exposure: float = 1.5
-    max_short_exposure: float = 0.8
+    max_short_exposure: float = 1.0
     borrow_rate_daily: float = 0.00005  # 约 1.8%/年，近似永续空头持有成本
 
 

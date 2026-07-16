@@ -30,14 +30,21 @@ def _scale_to_vol_target(
     vol_target: float,
     max_gross: float,
 ) -> np.ndarray:
-    """按组合波动率目标缩放权重。"""
+    """按组合波动率目标缩放权重；净空头组合只降杠杆不放大。"""
 
     if vol_target <= 0:
         return weights
     port_vol = float(np.nansum(np.abs(weights) * volatility))
     if port_vol <= 1e-8:
         return weights
-    return weights * min(max_gross, vol_target / port_vol)
+    gross = float(np.sum(np.abs(weights)))
+    if gross <= 1e-12:
+        return weights
+    scale = vol_target / port_vol
+    if float(weights.sum()) <= 0:
+        scale = min(scale, 1.0)
+    scale = min(scale, max_gross / gross)
+    return weights * scale
 
 
 @dataclass
