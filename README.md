@@ -22,16 +22,32 @@
 ```bash
 python3 -m crypto_lab.cli download --start 2021-01-01 --end 2026-07-15
 python3 -m crypto_lab.cli research
+python3 -m crypto_lab.cli optimize
 python3 -m unittest discover -s tests -v
 ```
 
 输出：
 
-- `reports/cross_market_report.md`：迁移设计和样本外结论；
-- `reports/backtest_results.json`：全部参数及训练/样本外指标；
+- `reports/cross_market_report.md`：首轮迁移原型样本外结论；
+- `reports/optimized_strategies_report.md`：低换手优化策略设计与验证；
+- `reports/optimized_backtest_results.json`：优化策略全部参数及训练/样本外指标；
+- `reports/backtest_results.json`：首轮策略参数及训练/样本外指标；
 - `reports/data_manifest.json`：数据来源、日期范围、行数和 SHA-256。
 
 仓库包含本次报告使用的原始 CSV 快照；上述固定起止日期命令可重新下载并核对清单中的 SHA-256。
+
+## 优化策略设计（第二轮）
+
+针对首轮失败原因（高换手、弱市满仓、财务因子失效），新增 4 个原型：
+
+| 策略 | 核心机制 | 目标 |
+|---|---|---|
+| `btc_dual_momentum` | BTC 均线门控 + 绝对/相对双动量 | 中低频捕捉趋势，避免接飞刀 |
+| `breadth_regime_rotation` | 市场广度三档仓位 | 用宽度替代财务择时 |
+| `core_satellite_vol_scaled` | BTC/ETH 核心 + 山寨卫星 + 波动缩放 | 低换手控制回撤 |
+| `majors_alts_regime` | 主流/山寨相对强弱 + BTC 趋势过滤 | 强化首轮唯一弱正信号 |
+
+判定规则：默认与优化参数样本外均需 CAGR、Sharpe 为正，才记为稳健候选；Bootstrap CAGR 95% CI 下界大于 0 才记为统计通过。
 
 ## 回测约束
 

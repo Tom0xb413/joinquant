@@ -72,6 +72,34 @@ def equal_weights(indices: np.ndarray, asset_count: int) -> np.ndarray:
     return weights
 
 
+def inverse_volatility_weights(
+    volatility: np.ndarray,
+    indices: np.ndarray,
+    asset_count: int,
+    gross_exposure: float = 1.0,
+) -> np.ndarray:
+    """对指定资产按波动率倒数加权，并限制总敞口不超过 1。"""
+
+    weights = np.zeros(asset_count, dtype=float)
+    if not len(indices) or gross_exposure <= 0:
+        return weights
+    vols = volatility[indices]
+    if not np.isfinite(vols).all() or np.any(vols <= 0):
+        return equal_weights(indices, asset_count) * min(1.0, gross_exposure)
+    inv = 1.0 / vols
+    weights[indices] = inv / inv.sum() * min(1.0, gross_exposure)
+    return weights
+
+
+def clip_gross_exposure(weights: np.ndarray, max_exposure: float = 1.0) -> np.ndarray:
+    """将多头权重总敞口裁剪到上限，保持相对比例。"""
+
+    total = float(weights.sum())
+    if total <= max_exposure or total <= 0:
+        return weights
+    return weights * (max_exposure / total)
+
+
 def finite_top(values: np.ndarray, count: int, descending: bool = True) -> np.ndarray:
     """从有限值中选前 count 个索引，结果顺序稳定。"""
 

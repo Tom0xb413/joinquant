@@ -14,6 +14,7 @@ from .data import (
     load_candles,
     save_candles,
 )
+from .optimize_research import run_optimized_research, write_optimized_markdown_report
 from .research import run_research, write_json, write_markdown_report
 
 
@@ -53,6 +54,14 @@ def build_parser() -> argparse.ArgumentParser:
     research.add_argument("--fee-rate", type=float, default=0.001)
     research.add_argument("--slippage-rate", type=float, default=0.0005)
     research.add_argument("--train-fraction", type=float, default=0.60)
+
+    optimize = subparsers.add_parser("optimize", help="运行重新设计的低换手优化策略研究")
+    optimize.add_argument("--data-dir", type=Path, default=Path("data/okx"))
+    optimize.add_argument("--output-dir", type=Path, default=Path("reports"))
+    optimize.add_argument("--symbols", nargs="+", default=list(DEFAULT_SYMBOLS))
+    optimize.add_argument("--fee-rate", type=float, default=0.001)
+    optimize.add_argument("--slippage-rate", type=float, default=0.0005)
+    optimize.add_argument("--train-fraction", type=float, default=0.60)
     return parser
 
 
@@ -64,6 +73,8 @@ def main(argv: list[str] | None = None) -> int:
         return _download(args)
     if args.command == "research":
         return _research(args)
+    if args.command == "optimize":
+        return _optimize(args)
     raise AssertionError(f"未知命令：{args.command}")
 
 
@@ -135,6 +146,37 @@ def _research(args: argparse.Namespace) -> int:
     write_json(args.output_dir / "data_manifest.json", manifest)
     write_markdown_report(args.output_dir / "cross_market_report.md", results, manifest)
     print(f"研究完成：{args.output_dir / 'cross_market_report.md'}")
+    return 0
+
+
+def _optimize(args: argparse.Namespace) -> int:
+    """加载缓存行情并生成优化策略研究结果。"""
+
+    series = {
+        symbol: load_candles(args.data_dir / f"{symbol}.csv")
+        for symbol in args.symbols
+    }
+    data = align_market_data(series)
+    cached_manifest = args.data_dir / "data_manifest.json"
+    manifest = (
+        json.loads(cached_manifest.read_text(encoding="utf-8"))
+        if cached_manifest.exists()
+        else dataset_manifest(args.data_dir, args.symbols)
+    )
+    results = run_optimized_research(
+        data,
+        fee_rate=args.fee_rate,
+        slippage_rate=args.slippage_rate,
+        train_fraction=args.train_fraction,
+    )
+    write_json(args.output_dir / "optimized_backtest_results.json", results)
+    write_json(args.output_dir / "data_manifest.json", manifest)
+    write_optimized_markdown_report(
+        args.output_dir / "optimized_strategies_report.md",
+        results,
+        manifest,
+    )
+    print(f"优化研究完成：{args.output_dir / 'optimized_strategies_report.md'}")
     return 0
 
 
