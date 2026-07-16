@@ -137,7 +137,7 @@ def save_candles(path: Path, candles: Iterable[Candle]) -> None:
 
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.writer(handle)
+        writer = csv.writer(handle, lineterminator="\n")
         writer.writerow(
             ["timestamp_ms", "date_utc", "open", "high", "low", "close", "volume_base", "volume_quote"]
         )
