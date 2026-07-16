@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import itertools
 import json
-from dataclasses import asdict, fields
+from dataclasses import fields
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -108,6 +108,22 @@ def run_research(
                 best_score = score
                 best_strategy = strategy
         optimized_result = run_backtest(data, best_strategy, fee_rate, slippage_rate)
+        optimized_test = optimized_result.metrics_dict(test_start, test_end)
+        default_test = default_result.metrics_dict(test_start, test_end)
+        bootstrap = _block_bootstrap_cagr(
+            optimized_result.daily_returns[split_index:],
+            seed=20260716 + sum(ord(character) for character in best_strategy.name),
+        )
+        optimized_positive = optimized_test["cagr"] > 0 and optimized_test["sharpe"] > 0
+        default_positive = default_test["cagr"] > 0 and default_test["sharpe"] > 0
+        statistically_supported = bootstrap["probability_cagr_positive"] >= 0.95
+        verdict = (
+            "统计通过"
+            if optimized_positive and default_positive and statistically_supported
+            else "有限通过"
+            if optimized_positive
+            else "未通过"
+        )
         strategies[best_strategy.name] = {
             "source_ids": list(best_strategy.source_ids),
             "candidates_tested": candidates,
@@ -115,9 +131,11 @@ def run_research(
             "default_parameters": _strategy_parameters(default_strategy),
             "selected_parameters": _strategy_parameters(best_strategy),
             "default_train": default_result.metrics_dict(train_start, train_end),
-            "default_test": default_result.metrics_dict(test_start, test_end),
+            "default_test": default_test,
             "optimized_train": optimized_result.metrics_dict(train_start, train_end),
-            "optimized_test": optimized_result.metrics_dict(test_start, test_end),
+            "optimized_test": optimized_test,
+            "optimized_test_bootstrap": bootstrap,
+            "cross_market_verdict": verdict,
         }
 
     benchmark = buy_and_hold(data, fee_rate=fee_rate, slippage_rate=slippage_rate)
@@ -125,6 +143,9 @@ def run_research(
     for result in strategies.values():
         test = result["optimized_test"]
         test["oos_positive"] = test["cagr"] > 0 and test["sharpe"] > 0
+        test["default_oos_positive"] = (
+            result["default_test"]["cagr"] > 0 and result["default_test"]["sharpe"] > 0
+        )
         test["risk_adjusted_better_than_btc"] = (
             test["sharpe"] > benchmark_test["sharpe"]
             and test["max_drawdown"] < benchmark_test["max_drawdown"]
@@ -138,6 +159,7 @@ def run_research(
             "slippage_rate_one_way": slippage_rate,
             "annualization_days": 365,
             "selection": "仅训练区间网格选参；样本外区间不参与选参",
+            "uncertainty": "样本外日收益使用 14 日循环区块 Bootstrap，2,000 次重采样",
             "known_biases": [
                 "固定使用当前仍在 OKX 交易且历史较长的币对，存在幸存者偏差",
                 "成交量是小市值/基本面因子的代理，不等同于历史流通市值或链上财务",
@@ -175,17 +197,23 @@ def write_markdown_report(path: Path, results: dict[str, Any], manifest: dict[st
     split = results["split"]
     benchmark = results["benchmark"]["test"]
     rows = []
+    verdict_counts = {"统计通过": 0, "有限通过": 0, "未通过": 0}
     for name, item in results["strategies"].items():
         metrics = item["optimized_test"]
-        verdict = "通过" if metrics["oos_positive"] else "未通过"
+        default_metrics = item["default_test"]
+        bootstrap = item["optimized_test_bootstrap"]
+        verdict = item["cross_market_verdict"]
+        verdict_counts[verdict] += 1
         rows.append(
-            "| {name} | {sources} | {cagr:.1%} | {sharpe:.2f} | {mdd:.1%} | {turnover:.1f} | {verdict} |".format(
+            "| {name} | {sources} | {default_cagr:.1%} | {cagr:.1%} | {sharpe:.2f} | {mdd:.1%} | {lower:.1%}–{upper:.1%} | {verdict} |".format(
                 name=name,
                 sources=", ".join(item["source_ids"]),
+                default_cagr=default_metrics["cagr"],
                 cagr=metrics["cagr"],
                 sharpe=metrics["sharpe"],
                 mdd=metrics["max_drawdown"],
-                turnover=metrics["turnover"],
+                lower=bootstrap["cagr_ci_95"][0],
+                upper=bootstrap["cagr_ci_95"][1],
                 verdict=verdict,
             )
         )
@@ -202,9 +230,10 @@ def write_markdown_report(path: Path, results: dict[str, Any], manifest: dict[st
         f"- 样本外区间：`{split['test_start']}` 至 `{split['test_end']}`",
         f"- BTC 样本外：CAGR `{benchmark['cagr']:.1%}`，Sharpe `{benchmark['sharpe']:.2f}`，最大回撤 `{benchmark['max_drawdown']:.1%}`",
         f"- 成本假设：单边手续费 `{results['methodology']['fee_rate_one_way']:.2%}` + 单边滑点 `{results['methodology']['slippage_rate_one_way']:.2%}`",
+        f"- 判定汇总：统计通过 `{verdict_counts['统计通过']}`，有限通过 `{verdict_counts['有限通过']}`，未通过 `{verdict_counts['未通过']}`。",
         "",
-        "| Crypto 策略族 | 对应原策略 | 样本外 CAGR | Sharpe | 最大回撤 | 换手 | 判定 |",
-        "|---|---:|---:|---:|---:|---:|---:|",
+        "| Crypto 策略族 | 对应原策略 | 默认参数 CAGR | 优化参数 CAGR | Sharpe | 最大回撤 | 区块 Bootstrap CAGR 95% CI | 判定 |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|",
         *rows,
         "",
         "## 迁移设计",
@@ -230,7 +259,11 @@ def write_markdown_report(path: Path, results: dict[str, Any], manifest: dict[st
         "1. 所有信号只读取 T-1 及更早数据，持有 T 日 close-to-close 收益。",
         "2. 前 60% 时间段执行有限网格优化，后 40% 完全留作样本外评价。",
         "3. 每次目标权重变化按绝对权重变化计交易成本；现金收益按 0 处理。",
-        "4. 以 BTC 买入持有作为统一基准，Crypto 按 365 天年化。",
+        "4. 对样本外日收益进行 14 日区块 Bootstrap（2,000 次），保留收益自相关后估计 CAGR 置信区间。",
+        "5. 以 BTC 买入持有作为统一基准，Crypto 按 365 天年化。",
+        "",
+        "判定规则：优化参数与默认参数均为正，且 Bootstrap 中 CAGR 为正的概率至少 95%，才记为“统计通过”；",
+        "仅优化参数为正记为“有限通过”；其余为“未通过”。",
         "",
         "## 限制",
         "",
@@ -258,5 +291,36 @@ def _strategy_parameters(strategy: object) -> dict[str, Any]:
         field.name: getattr(strategy, field.name)
         for field in fields(strategy)
         if field.name not in {"name", "source_ids"}
+    }
+
+
+def _block_bootstrap_cagr(
+    returns: np.ndarray,
+    block_size: int = 14,
+    samples: int = 2_000,
+    seed: int = 20260716,
+) -> dict[str, Any]:
+    """用循环区块 Bootstrap 估计复合年化收益不确定性。"""
+
+    values = np.asarray(returns, dtype=float)
+    if len(values) < block_size * 2 or np.any(values <= -1):
+        raise ValueError("Bootstrap 收益样本无效或过短")
+    generator = np.random.default_rng(seed)
+    block_count = int(np.ceil(len(values) / block_size))
+    offsets = np.arange(block_size)
+    cagrs = np.empty(samples, dtype=float)
+    for sample in range(samples):
+        starts = generator.integers(0, len(values), size=block_count)
+        indices = ((starts[:, None] + offsets) % len(values)).ravel()[: len(values)]
+        annual_log_return = float(np.mean(np.log1p(values[indices])) * 365.0)
+        cagrs[sample] = np.expm1(annual_log_return)
+    lower, median, upper = np.quantile(cagrs, [0.025, 0.5, 0.975])
+    return {
+        "method": "circular_block_bootstrap",
+        "block_days": block_size,
+        "samples": samples,
+        "cagr_ci_95": [float(lower), float(upper)],
+        "cagr_median": float(median),
+        "probability_cagr_positive": float(np.mean(cagrs > 0)),
     }
 

@@ -46,6 +46,7 @@ def rsi(close: np.ndarray, end: int, window: int = 14) -> np.ndarray:
         out=np.full_like(gains, np.inf),
         where=losses > 0,
     )
+    relative_strength[(gains <= 1e-15) & (losses <= 1e-15)] = 1.0
     return 100.0 - 100.0 / (1.0 + relative_strength)
 
 

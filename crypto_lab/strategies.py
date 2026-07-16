@@ -162,10 +162,10 @@ class RsiFactorRotation:
 
     def target_weights(self, data: MarketData, signal_index: int, previous: np.ndarray) -> np.ndarray:
         current_rsi = rsi(data.close, signal_index, 14)
-        held = np.flatnonzero(previous > 0)
-        survivors = held[current_rsi[held] <= self.exit_rsi]
         if signal_index % self.rebalance_days != 0:
-            return equal_weights(survivors, len(data.symbols))
+            target = previous.copy()
+            target[(previous > 0) & (current_rsi > self.exit_rsi)] = 0.0
+            return target
         momentum = trailing_return(data.close, signal_index, 90)
         volatility = trailing_volatility(data.close, signal_index, 30)
         liquidity = trailing_mean(data.volume_quote, signal_index, 30)
