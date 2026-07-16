@@ -121,32 +121,44 @@ def run_optimized_research(
         )
         optimized_positive = optimized_test["cagr"] > 0 and optimized_test["sharpe"] > 0
         default_positive = default_test["cagr"] > 0 and default_test["sharpe"] > 0
-        beats_btc = (
-            optimized_test["sharpe"] > 0
-            and optimized_test["cagr"] > 0
-        )
+        beats_btc = optimized_test["cagr"] > 0 and optimized_test["sharpe"] > 0
         statistically_supported = bootstrap["cagr_ci_95"][0] > 0
+        default_bootstrap = _block_bootstrap_cagr(
+            default_result.daily_returns[split_index:],
+            seed=20260716 + 17 * sum(ord(character) for character in default_strategy.name),
+        )
+        default_statistically_supported = default_bootstrap["cagr_ci_95"][0] > 0
         if optimized_positive and default_positive and statistically_supported:
             verdict = "统计通过"
+            recommended = _optimized_parameters(default_strategy)
         elif optimized_positive and default_positive:
             verdict = "稳健候选（默认与优化均正）"
+            recommended = _optimized_parameters(default_strategy)
+        elif default_positive and not optimized_positive:
+            verdict = "默认参数有效（优化过拟合）"
+            recommended = _optimized_parameters(default_strategy)
         elif optimized_positive:
             verdict = "点估计为正（无统计支持）"
+            recommended = _optimized_parameters(best_strategy)
         else:
             verdict = "未通过"
+            recommended = _optimized_parameters(default_strategy)
         strategies[best_strategy.name] = {
             "ideas": list(getattr(best_strategy, "ideas", ())),
             "candidates_tested": candidates,
             "selection_objective": "train_sharpe - 0.5*train_mdd - 0.025*annual_turnover",
             "default_parameters": _optimized_parameters(default_strategy),
             "selected_parameters": _optimized_parameters(best_strategy),
+            "recommended_parameters": recommended,
             "default_train": default_result.metrics_dict(train_start, train_end),
             "default_test": default_test,
             "optimized_train": optimized_result.metrics_dict(train_start, train_end),
             "optimized_test": optimized_test,
+            "default_test_bootstrap": default_bootstrap,
             "optimized_test_bootstrap": bootstrap,
             "verdict": verdict,
             "beats_buy_hold_point_estimate": beats_btc,
+            "default_statistically_supported": default_statistically_supported,
         }
 
     benchmark = buy_and_hold(data, fee_rate=fee_rate, slippage_rate=slippage_rate)
@@ -212,26 +224,34 @@ def write_optimized_markdown_report(
         metrics = item["optimized_test"]
         default_metrics = item["default_test"]
         bootstrap = item["optimized_test_bootstrap"]
+        default_bootstrap = item.get("default_test_bootstrap", bootstrap)
         verdict = item["verdict"]
         verdict_counts[verdict] = verdict_counts.get(verdict, 0) + 1
+        focus_metrics = default_metrics if "默认参数有效" in verdict else metrics
+        focus_bootstrap = default_bootstrap if "默认参数有效" in verdict else bootstrap
         rows.append(
             "| {name} | {ideas} | {default_cagr:.1%} | {cagr:.1%} | {sharpe:.2f} | {mdd:.1%} | {to:.1f} | {lower:.1%}–{upper:.1%} | {verdict} |".format(
                 name=name,
                 ideas=" / ".join(item["ideas"]),
                 default_cagr=default_metrics["cagr"],
                 cagr=metrics["cagr"],
-                sharpe=metrics["sharpe"],
-                mdd=metrics["max_drawdown"],
-                to=metrics["turnover"],
-                lower=bootstrap["cagr_ci_95"][0],
-                upper=bootstrap["cagr_ci_95"][1],
+                sharpe=focus_metrics["sharpe"],
+                mdd=focus_metrics["max_drawdown"],
+                to=focus_metrics["turnover"],
+                lower=focus_bootstrap["cagr_ci_95"][0],
+                upper=focus_bootstrap["cagr_ci_95"][1],
                 verdict=verdict,
             )
         )
-        if verdict in {"统计通过", "稳健候选（默认与优化均正）"}:
+        if verdict in {
+            "统计通过",
+            "稳健候选（默认与优化均正）",
+            "默认参数有效（优化过拟合）",
+        }:
             recommendations.append(
-                f"- **{name}**：默认 CAGR `{default_metrics['cagr']:.1%}`，优化 CAGR `{metrics['cagr']:.1%}`，"
-                f"Sharpe `{metrics['sharpe']:.2f}`，最大回撤 `{metrics['max_drawdown']:.1%}`。"
+                f"- **{name}**（{verdict}）：推荐参数 `{item['recommended_parameters']}`；"
+                f"默认 CAGR `{default_metrics['cagr']:.1%}`，优化 CAGR `{metrics['cagr']:.1%}`；"
+                f"关注 Sharpe `{focus_metrics['sharpe']:.2f}`、最大回撤 `{focus_metrics['max_drawdown']:.1%}`。"
             )
     if not recommendations:
         recommendations.append("- 当前没有同时满足默认/优化均为正且统计稳健的策略；请把下方点估计正的结果仅作继续研究线索。")
@@ -243,8 +263,11 @@ def write_optimized_markdown_report(
         "## 结论",
         "",
         "本报告在上一轮高换手策略失效的基础上，重新设计了 4 个低换手、带 BTC/广度风险门控的原型。",
-        "“有效”至少要求默认参数与训练优选参数的样本外 CAGR、Sharpe 同时为正；",
-        "若 Bootstrap CAGR 95% 置信区间下界也大于 0，则记为统计通过。",
+        "有效性分层：",
+        "1. 统计通过：默认与优化均正，且 Bootstrap CAGR 95% CI 下界 > 0；",
+        "2. 稳健候选：默认与优化样本外均正；",
+        "3. 默认参数有效：默认参数样本外为正，但训练优选参数过拟合失效；",
+        "4. 其余仅作研究线索，不建议作为有效策略。",
         "",
         f"- 训练区间：`{split['train_start']}` 至 `{split['train_end']}`",
         f"- 样本外区间：`{split['test_start']}` 至 `{split['test_end']}`",
