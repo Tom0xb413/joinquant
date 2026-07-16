@@ -27,14 +27,15 @@ def _btc_trend_on(data: MarketData, signal_index: int, window: int) -> bool:
 
 @dataclass
 class BtcDualMomentum:
-    """BTC 趋势门控 + 绝对/相对双动量轮动。
+    """BTC 趋势门控 + 长短期双动量 + 自身均线过滤。
 
     设计思想来自策略 01 的动量轮动与策略 02 的风险开关：
-    仅在 BTC 多头时持仓，并同时要求资产自身动量为正，再取相对最强的 Top-K。
+    仅在 BTC 多头时持仓；资产需同时满足长期、短期动量为正且站上自身均线。
     """
 
     regime_window: int = 120
     lookback: int = 90
+    fast_lookback: int = 45
     top_k: int = 3
     rebalance_days: int = 21
     name: str = "btc_dual_momentum"
@@ -45,9 +46,18 @@ class BtcDualMomentum:
             return previous
         if not _btc_trend_on(data, signal_index, self.regime_window):
             return np.zeros(len(data.symbols))
-        momentum = trailing_return(data.close, signal_index, self.lookback)
-        score = np.where(np.isfinite(momentum) & (momentum > 0), momentum, np.nan)
-        return equal_weights(finite_top(score, self.top_k), len(data.symbols))
+        slow = trailing_return(data.close, signal_index, self.lookback)
+        fast = trailing_return(data.close, signal_index, self.fast_lookback)
+        own_ma = trailing_mean(data.close, signal_index, self.lookback)
+        score = 0.7 * slow + 0.3 * fast
+        eligible = (
+            np.isfinite(score)
+            & np.isfinite(own_ma)
+            & (slow > 0)
+            & (fast > 0)
+            & (data.close[signal_index] > own_ma)
+        )
+        return equal_weights(finite_top(np.where(eligible, score, np.nan), self.top_k), len(data.symbols))
 
 
 @dataclass
@@ -98,7 +108,7 @@ class CoreSatelliteVolScaled:
     satellite_count: int = 2
     rebalance_days: int = 30
     core_weight: float = 0.70
-    vol_scale: float = 0.50
+    vol_scale: float = 0.70
     vol_window: int = 30
     name: str = "core_satellite_vol_scaled"
     ideas: tuple[str, ...] = ("02-风格轮动", "03/04-动态仓位")

@@ -33,13 +33,25 @@ class OptimizedStrategyTests(unittest.TestCase):
         data = rising_market()
         # 把后半段 BTC 压到均线下方
         data.close[200:, 0] = 50.0
-        strategy = BtcDualMomentum(regime_window=100, lookback=60, top_k=2, rebalance_days=1)
+        strategy = BtcDualMomentum(
+            regime_window=100,
+            lookback=60,
+            fast_lookback=20,
+            top_k=2,
+            rebalance_days=1,
+        )
         weights = strategy.target_weights(data, 220, np.zeros(4))
         np.testing.assert_allclose(weights, np.zeros(4))
 
     def test_dual_momentum_prefers_positive_relative_winners(self):
         data = rising_market()
-        strategy = BtcDualMomentum(regime_window=100, lookback=60, top_k=2, rebalance_days=1)
+        strategy = BtcDualMomentum(
+            regime_window=100,
+            lookback=60,
+            fast_lookback=20,
+            top_k=2,
+            rebalance_days=1,
+        )
         weights = strategy.target_weights(data, 220, np.zeros(4))
         self.assertAlmostEqual(float(weights.sum()), 1.0)
         self.assertGreater(weights[2], 0.0)  # SOL 最强

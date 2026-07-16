@@ -38,6 +38,7 @@ OPTIMIZED_STRATEGY_SPECS = (
         {
             "regime_window": [100, 120, 150],
             "lookback": [60, 90],
+            "fast_lookback": [30, 45],
             "top_k": [3, 4],
             "rebalance_days": [14, 21, 30],
         },
@@ -45,10 +46,10 @@ OPTIMIZED_STRATEGY_SPECS = (
     (
         BreadthRegimeRotation,
         {
-            "ma_window": [80, 100, 150],
+            "ma_window": [100, 150],
             "lookback": [60, 90],
             "top_k": [3, 4],
-            "rebalance_days": [14, 21],
+            "rebalance_days": [21, 30],
             "low_breadth": [0.30, 0.35],
             "high_breadth": [0.55, 0.60],
         },
@@ -58,9 +59,9 @@ OPTIMIZED_STRATEGY_SPECS = (
         {
             "regime_window": [100, 120, 150],
             "lookback": [60, 90],
-            "satellite_count": [1, 2],
+            "satellite_count": [2],
             "rebalance_days": [21, 30],
-            "vol_scale": [0.35, 0.50, 0.70],
+            "vol_scale": [0.50, 0.70],
         },
     ),
     (
@@ -106,7 +107,7 @@ def run_optimized_research(
             metrics = result.metrics(train_start, train_end)
             # 额外惩罚年化换手，避免回到上一轮高成本陷阱
             annual_turnover = metrics.turnover / max(metrics.observations / 365.0, 1e-9)
-            score = metrics.sharpe - 0.5 * metrics.max_drawdown - 0.01 * annual_turnover
+            score = metrics.sharpe - 0.5 * metrics.max_drawdown - 0.025 * annual_turnover
             candidates += 1
             if np.isfinite(score) and score > best_score:
                 best_score = score
@@ -136,7 +137,7 @@ def run_optimized_research(
         strategies[best_strategy.name] = {
             "ideas": list(getattr(best_strategy, "ideas", ())),
             "candidates_tested": candidates,
-            "selection_objective": "train_sharpe - 0.5*train_mdd - 0.01*annual_turnover",
+            "selection_objective": "train_sharpe - 0.5*train_mdd - 0.025*annual_turnover",
             "default_parameters": _optimized_parameters(default_strategy),
             "selected_parameters": _optimized_parameters(best_strategy),
             "default_train": default_result.metrics_dict(train_start, train_end),
@@ -271,7 +272,7 @@ def write_optimized_markdown_report(
         "",
         "| 策略 | 机制 | 为何可能比上一轮更稳 |",
         "|---|---|---|",
-        "| `btc_dual_momentum` | BTC 均线门控 + 正动量 Top-K | 去掉日频追涨，改中低频双动量 |",
+        "| `btc_dual_momentum` | BTC 均线门控 + 长短期双动量 + 自身均线 | 去掉日频追涨，增加确认过滤 |",
         "| `breadth_regime_rotation` | 广度弱/中/强三档仓位 | 用市场宽度替代财务择时 |",
         "| `core_satellite_vol_scaled` | BTC/ETH 核心 + 山寨卫星 + 波动缩放 | 低换手，主动降杠杆 |",
         "| `majors_alts_regime` | 主流/山寨相对强弱 + BTC 趋势过滤 | 强化上一轮唯一弱正信号 |",
