@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "joinquant-crypto-lab"
+version = "0.1.0"
+description = "将聚宽 A 股策略迁移到 Crypto 的可复现研究与回测工具"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=2.4.4,<3",
+]
+
+[project.scripts]
+crypto-lab = "crypto_lab.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["crypto_lab*"]
+
