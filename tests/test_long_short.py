@@ -53,17 +53,20 @@ class LongShortTests(unittest.TestCase):
         result = run_long_short_backtest(sample_market(), ShortStub(), fee_rate=0.0, slippage_rate=0.0)
         self.assertTrue(np.any(result.weights < 0))
 
-    def test_excessive_gross_is_rejected(self):
+    def test_excessive_gross_is_clipped(self):
         class TooGross(ShortStub):
             def target_weights(self, data, signal_index, previous):
                 return np.array([1.0, -1.0, 0.0])
 
-        with self.assertRaisesRegex(ValueError, "总敞口"):
-            run_long_short_backtest(
-                sample_market(),
-                TooGross(),
-                limits=LongShortLimits(max_gross_exposure=1.5),
-            )
+        result = run_long_short_backtest(
+            sample_market(),
+            TooGross(),
+            fee_rate=0.0,
+            slippage_rate=0.0,
+            limits=LongShortLimits(max_gross_exposure=1.5, max_net_exposure=1.5, max_short_exposure=1.0),
+        )
+        gross = np.sum(np.abs(result.weights[1:]), axis=1)
+        self.assertTrue(np.all(gross <= 1.5 + 1e-9))
 
     def test_long_only_engine_still_rejects_shorts(self):
         with self.assertRaisesRegex(ValueError, "只允许多头"):
