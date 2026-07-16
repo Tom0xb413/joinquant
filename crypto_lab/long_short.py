@@ -45,6 +45,7 @@ def run_long_short_backtest(
 
     for index in range(1, rows):
         target = np.asarray(strategy.target_weights(data, index - 1, current.copy()), dtype=float)
+        target = _clip_long_short_weights(target, limits)
         _validate_long_short_weights(target, columns, limits)
         turnover[index] = float(np.sum(np.abs(target - current)))
         trade_cost = turnover[index] * trade_cost_rate
@@ -66,6 +67,24 @@ def run_long_short_backtest(
         turnover=turnover,
         costs=costs,
     )
+
+
+def _clip_long_short_weights(weights: np.ndarray, limits: LongShortLimits) -> np.ndarray:
+    """将漂移后的权重裁剪回允许敞口，避免非调仓日触发硬失败。"""
+
+    clipped = np.asarray(weights, dtype=float).copy()
+    if not np.isfinite(clipped).all():
+        return np.zeros_like(clipped)
+    short = float(np.sum(np.maximum(-clipped, 0.0)))
+    if short > limits.max_short_exposure and short > 0:
+        clipped[clipped < 0] *= limits.max_short_exposure / short
+    gross = float(np.sum(np.abs(clipped)))
+    if gross > limits.max_gross_exposure and gross > 0:
+        clipped *= limits.max_gross_exposure / gross
+    net = float(np.sum(clipped))
+    if abs(net) > limits.max_net_exposure and abs(net) > 0:
+        clipped *= limits.max_net_exposure / abs(net)
+    return clipped
 
 
 def _validate_long_short_weights(
