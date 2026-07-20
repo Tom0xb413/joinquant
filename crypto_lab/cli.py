@@ -23,6 +23,13 @@ from .ema_research import (
     run_ema_research,
     write_ema_report,
 )
+from .cta_research import (
+    plot_cta_charts,
+    prepare_cta_dataset,
+    run_cta_research,
+    serialize_cta_results,
+    write_cta_report,
+)
 from .optimize_research import run_optimized_research, write_optimized_markdown_report
 from .research import run_research, write_json, write_markdown_report
 from .data import (
@@ -114,6 +121,21 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path("/opt/cursor/artifacts/ema-report"),
     )
+
+    cta = subparsers.add_parser("cta-research", help="机构级TOP15多周期动量CTA研究")
+    cta.add_argument("--data-dir", type=Path, default=Path("data/okx_cta"))
+    cta.add_argument("--output-dir", type=Path, default=Path("reports"))
+    cta.add_argument("--start", type=date.fromisoformat, default=date(2021, 1, 1))
+    cta.add_argument("--end", type=date.fromisoformat, default=date(2026, 7, 15))
+    cta.add_argument("--refresh", action="store_true")
+    cta.add_argument("--fee-rate", type=float, default=0.001)
+    cta.add_argument("--slippage-rate", type=float, default=0.0005)
+    cta.add_argument("--train-fraction", type=float, default=0.60)
+    cta.add_argument(
+        "--artifact-dir",
+        type=Path,
+        default=Path("/opt/cursor/artifacts/cta-report"),
+    )
     return parser
 
 
@@ -133,6 +155,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cycle_report(args)
     if args.command == "ema-research":
         return _ema_research(args)
+    if args.command == "cta-research":
+        return _cta_research(args)
     raise AssertionError(f"未知命令：{args.command}")
 
 
@@ -332,6 +356,40 @@ def _ema_research(args: argparse.Namespace) -> int:
     for path in chart_paths.values():
         shutil.copy2(path, args.artifact_dir / path.name)
     print(f"EMA 研究完成：{args.output_dir / 'ema_report.md'}")
+    return 0
+
+
+
+def _cta_research(args: argparse.Namespace) -> int:
+    """运行机构级 TOP15 多周期动量 CTA 研究。"""
+
+    import shutil
+
+    manifest = prepare_cta_dataset(
+        args.data_dir,
+        start=args.start,
+        end=args.end,
+        refresh=args.refresh,
+    )
+    results = run_cta_research(
+        args.data_dir,
+        fee_rate=args.fee_rate,
+        slippage_rate=args.slippage_rate,
+        train_fraction=args.train_fraction,
+    )
+    chart_dir = args.output_dir / "cta_charts"
+    chart_paths = plot_cta_charts(results, chart_dir)
+    write_json(args.output_dir / "cta_results.json", serialize_cta_results(results))
+    write_cta_report(
+        args.output_dir / "cta_report.md",
+        results,
+        chart_dir,
+        manifest,
+    )
+    args.artifact_dir.mkdir(parents=True, exist_ok=True)
+    for path in chart_paths.values():
+        shutil.copy2(path, args.artifact_dir / path.name)
+    print(f"CTA 研究完成：{args.output_dir / 'cta_report.md'}")
     return 0
 
 
