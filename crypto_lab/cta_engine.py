@@ -124,18 +124,18 @@ class FastInstitutionalCTA:
     panel_1d: PanelData
     top_k: int = 3
     rebalance_bars: int = 12
-    vol_target: float = 0.30
+    vol_target: float = 0.26
     max_gross: float = 1.0
     atr_stop_mult: float = 3.0
     min_score: float = 0.48
     exit_score: float = 0.35
     # 组合回撤熔断：软降仓 + 硬空仓冷却后按信号全风险再入场（避免永久锁仓）
     # 目标：全样本 MDD≤25%，并尽量保留/提升 CAGR
-    dd_soft: float = 0.12
-    dd_hard: float = 0.195
+    dd_soft: float = 0.14
+    dd_hard: float = 0.19
     dd_reentry: float = 0.06
     dd_min_scale: float = 0.40
-    dd_cooldown_bars: int = 42  # 4H≈1周；硬熔断后强制空仓的最短冷却
+    dd_cooldown_bars: int = 36  # 4H≈6天；硬熔断后强制空仓的最短冷却
     dd_recover_scale: float = 1.0  # 冷却结束后按原信号恢复；勿在恢复期再套 soft→0
     half_risk_scale: float = 0.50
     name: str = "institutional_momentum_cta"
