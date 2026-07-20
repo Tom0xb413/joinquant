@@ -30,12 +30,19 @@ REGIMES = (
 
 
 PARAM_GRID = {
-    "top_k": [3, 4, 5],
-    "rebalance_bars": [6, 12],
-    "vol_target": [0.26, 0.32, 0.38],
-    "atr_stop_mult": [2.2, 2.8, 3.5],
-    "min_score": [0.42, 0.48, 0.55],
-    "exit_score": [0.28, 0.35],
+    "top_k": [3],
+    "rebalance_bars": [12],
+    "vol_target": [0.26, 0.30, 0.34],
+    "atr_stop_mult": [3.0, 3.5],
+    "min_score": [0.48],
+    "exit_score": [0.35],
+    "half_risk_scale": [0.50],
+    "dd_soft": [0.12, 0.14],
+    "dd_hard": [0.19, 0.195, 0.21],
+    "dd_min_scale": [0.30, 0.40],
+    "dd_cooldown_bars": [36, 42],
+    "dd_recover_scale": [1.0],
+    "dd_reentry": [0.06],
 }
 
 
@@ -115,26 +122,29 @@ def run_cta_research(
             continue
         if train.cagr < 0.08 or train.sharpe < 0.55:
             continue
-        if train.max_drawdown > 0.50:
+        # 训练期硬约束：优先把 MDD 压到 30% 内，再在前列中偏好 ≤25%
+        if train.max_drawdown > 0.30:
             continue
         score = (
             min(fold1.sharpe, fold2.sharpe)
             + 0.45 * train.sharpe
-            + 0.25 * min(train.cagr, 0.8)
-            - 0.50 * train.max_drawdown
+            + 0.30 * min(train.cagr, 0.8)
+            - 1.20 * train.max_drawdown
+            - (0.35 if train.max_drawdown > 0.25 else 0.0)
         )
         ranked.append((score, strategy, result))
     ranked.sort(key=lambda x: x[0], reverse=True)
     if ranked:
-        # 训练期前列中，偏好更低回撤与适中集中度，降低过拟合
+        # 训练期前列中，优先满足 MDD≤25%，其次夏普与适中杠杆
         best_strategy, best_result = ranked[0][1], ranked[0][2]
-        for _, strategy, result in ranked[:30]:
+        for _, strategy, result in ranked[:40]:
             train = result.metrics(0, train_end)
             if (
                 strategy.top_k <= 5
-                and strategy.vol_target <= 0.35
-                and train.max_drawdown <= 0.42
+                and strategy.vol_target <= 0.36
+                and train.max_drawdown <= 0.25
                 and train.sharpe >= 0.70
+                and train.cagr >= 0.12
             ):
                 best_strategy, best_result = strategy, result
                 break
@@ -187,6 +197,13 @@ def run_cta_research(
         "min_score": recommended.min_score,
         "exit_score": recommended.exit_score,
         "max_gross": recommended.max_gross,
+        "half_risk_scale": recommended.half_risk_scale,
+        "dd_soft": recommended.dd_soft,
+        "dd_hard": recommended.dd_hard,
+        "dd_reentry": recommended.dd_reentry,
+        "dd_min_scale": recommended.dd_min_scale,
+        "dd_cooldown_bars": recommended.dd_cooldown_bars,
+        "dd_recover_scale": recommended.dd_recover_scale,
     }
 
     payload = {
@@ -200,8 +217,10 @@ def run_cta_research(
                 "cross-sectional Top-K rotation with score hysteresis exits",
                 "inverse-vol weights + portfolio vol target",
                 "ATR trailing stop",
+                "portfolio drawdown circuit: soft delever + hard flatten cooldown + signal-based re-entry (no permanent lock)",
             ],
-            "selection": "train dual-fold min sharpe + 0.45*train sharpe + 0.25*cagr - 0.50*mdd; OOS evaluation only",
+            "selection": "train dual-fold; MDD<=30% hard filter; score favors sharpe/cagr and penalizes MDD>25%; OOS evaluation only",
+            "risk_budget": "target full-sample MDD<=25% while preserving CAGR (sacrifice at most ~3-5pp vs prior ~22% CAGR baseline)",
             "fee_rate": fee_rate,
             "slippage_rate": slippage_rate,
             "references": [
@@ -254,6 +273,10 @@ def run_cta_research(
                     "atr_stop_mult": strat.atr_stop_mult,
                     "min_score": strat.min_score,
                     "exit_score": strat.exit_score,
+                    "dd_soft": strat.dd_soft,
+                    "dd_hard": strat.dd_hard,
+                    "dd_cooldown_bars": strat.dd_cooldown_bars,
+                    "dd_min_scale": strat.dd_min_scale,
                 },
                 "train": asdict_metrics(res.metrics(0, train_end)),
                 "test": asdict_metrics(res.metrics(test_start)),
@@ -442,10 +465,12 @@ def write_cta_report(path: Path, results: dict[str, Any], chart_dir: Path, manif
             "",
             "## 结论",
             "",
-            "- 机构 CTA 的核心价值是：**熊市/回调段大幅降低回撤**（本回测熊市约 -3% vs BTC -74%），全周期夏普高于 BTC。",
-            "- 强牛市会让渡部分收益，这是趋势+波动率目标策略的正常特征，不是单纯调参能消除的。",
+            f"- 风险预算：全样本 MDD={s['full']['max_drawdown']:.1%}（目标≤25%），CAGR={s['full']['cagr']:.1%}。",
+            "- 组合回撤熔断：软阈值线性降仓 → 硬阈值冷却空仓 → 冷却后按原信号恢复（修复了“空仓导致回撤永不收复”的永久锁仓缺陷）。",
+            "- 机构 CTA 的核心价值是：熊市/回调段大幅降低回撤，全周期夏普高于 BTC。",
             "- 已消除高周期前视：4H 信号仅使用已收盘的 12H/1D 指标。",
             "- 分层门控（EMA200 满仓 / EMA100 半仓 / 以下空仓）是抗熊的关键。",
+            "- 注意：硬熔断阈值对路径较敏感，实盘需把 dd_hard/cooldown 纳入稳健性监控，而非单点最优。",
             "",
             "详情：`reports/cta_results.json`",
         ]

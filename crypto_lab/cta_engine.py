@@ -122,13 +122,22 @@ class FastInstitutionalCTA:
     panel_4h: PanelData
     panel_12h: PanelData
     panel_1d: PanelData
-    top_k: int = 4
-    rebalance_bars: int = 6
+    top_k: int = 3
+    rebalance_bars: int = 12
     vol_target: float = 0.30
     max_gross: float = 1.0
-    atr_stop_mult: float = 2.8
+    atr_stop_mult: float = 3.0
     min_score: float = 0.48
     exit_score: float = 0.35
+    # 组合回撤熔断：软降仓 + 硬空仓冷却后按信号全风险再入场（避免永久锁仓）
+    # 目标：全样本 MDD≤25%，并尽量保留/提升 CAGR
+    dd_soft: float = 0.12
+    dd_hard: float = 0.195
+    dd_reentry: float = 0.06
+    dd_min_scale: float = 0.40
+    dd_cooldown_bars: int = 42  # 4H≈1周；硬熔断后强制空仓的最短冷却
+    dd_recover_scale: float = 1.0  # 冷却结束后按原信号恢复；勿在恢复期再套 soft→0
+    half_risk_scale: float = 0.50
     name: str = "institutional_momentum_cta"
 
     def target_weights(self, index: int, previous: np.ndarray, stop_state: dict) -> tuple[np.ndarray, dict]:
@@ -171,15 +180,13 @@ class FastInstitutionalCTA:
             risk_scale = 1.0
             active_top_k = self.top_k
         elif above100:
-            # 反弹/过渡市：半仓 + 更少标的，避免熊市中继段大幅回撤
-            risk_scale = 0.45
+            risk_scale = self.half_risk_scale
             active_top_k = max(1, min(2, self.top_k))
         else:
             stop_state["peaks"] = np.zeros(n)
             return np.zeros(n), stop_state
 
         score = self._score_at(index, i1, i12)
-        # 滞回：已持仓可用更低 exit_score 保留，降低来回打脸
         held = previous > 1e-9
         tradable = np.isfinite(score) & (
             (score >= self.min_score) | (held & (score >= self.exit_score))
@@ -341,7 +348,7 @@ def run_cta_backtest(
     fee_rate: float = 0.001,
     slippage_rate: float = 0.0005,
 ) -> CtaBacktestResult:
-    """4H 面板回测：T 收盘信号，持有至 T+1。"""
+    """4H 面板回测：T 收盘信号，持有至 T+1；叠加组合回撤熔断。"""
 
     panel = strategy.panel_4h
     n_rows, n_cols = panel.size, panel.n_assets
@@ -350,21 +357,58 @@ def run_cta_backtest(
     turnover = np.zeros(n_rows)
     costs = np.zeros(n_rows)
     previous = np.zeros(n_cols)
-    stop_state: dict = {}
+    stop_state: dict = {"dd_cooldown": 0, "dd_recovering": False}
     cost_rate = fee_rate + slippage_rate
     asset_rets = np.zeros((n_rows, n_cols))
     asset_rets[1:] = panel.close[1:] / panel.close[:-1] - 1.0
+    equity = 1.0
+    peak_equity = 1.0
 
     for index in range(1, n_rows):
-        # 使用上一根已收盘 bar 的信号，避免同根前视
         target, stop_state = strategy.target_weights(index - 1, previous, stop_state)
         target = np.asarray(target, dtype=float)
+        # 组合级回撤熔断（仅使用截至上一根的净值，无前视）
+        # 硬熔断后：冷却期空仓 → 以 recover_scale 再入场，避免“空仓导致回撤永不收复”的永久锁仓。
+        current_dd = 0.0 if peak_equity <= 1e-12 else max(0.0, 1.0 - equity / peak_equity)
+        cooldown = int(stop_state.get("dd_cooldown", 0))
+        recovering = bool(stop_state.get("dd_recovering", False))
+
+        if current_dd <= strategy.dd_reentry:
+            recovering = False
+            cooldown = 0
+            stop_state["lock_dd"] = 0.0
+
+        lock_dd = float(stop_state.get("lock_dd", 0.0))
+        # 首次触及硬阈值，或恢复期回撤再加深超过缓冲后，重启冷却
+        hard_hit = current_dd >= strategy.dd_hard and cooldown <= 0
+        deeper = recovering and current_dd >= lock_dd + 0.03 and cooldown <= 0
+        if hard_hit and (not recovering or deeper):
+            cooldown = max(1, int(strategy.dd_cooldown_bars))
+            recovering = True
+            stop_state["lock_dd"] = current_dd
+
+        if cooldown > 0:
+            target = np.zeros(n_cols)
+            cooldown -= 1
+        elif recovering and current_dd > strategy.dd_reentry:
+            # 恢复期不再套用 soft→0 公式（否则硬阈值附近会永久空仓）
+            target = target * float(np.clip(strategy.dd_recover_scale, 0.0, 1.0))
+        elif current_dd >= strategy.dd_soft:
+            span = max(strategy.dd_hard - strategy.dd_soft, 1e-6)
+            frac = min(1.0, (current_dd - strategy.dd_soft) / span)
+            scale = 1.0 - frac * (1.0 - strategy.dd_min_scale)
+            target = target * float(np.clip(scale, strategy.dd_min_scale, 1.0))
+
+        stop_state["dd_cooldown"] = cooldown
+        stop_state["dd_recovering"] = recovering
+
         turnover[index] = float(np.sum(np.abs(target - previous)))
         costs[index] = turnover[index] * cost_rate
         gross = float(target @ asset_rets[index])
         returns[index] = max((1.0 + gross) * (1.0 - costs[index]) - 1.0, -1.0)
         weights[index] = target
-        # 权重漂移
+        equity *= 1.0 + returns[index]
+        peak_equity = max(peak_equity, equity)
         denom = 1.0 + gross
         previous = target * (1.0 + asset_rets[index]) / denom if denom > 0 else np.zeros(n_cols)
         previous[np.abs(previous) < 1e-14] = 0.0
