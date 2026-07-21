@@ -4,9 +4,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 from datetime import date, datetime, timezone
 from pathlib import Path
 
+from .core_top5 import CORE_TOP5_SYMBOLS
+from .core_top5_research import (
+    plot_core_top5_research,
+    run_core_top5_research,
+    write_core_top5_report,
+)
 from .crypto_alpha_research import run_crypto_alpha_research, write_crypto_alpha_report
 from .cycle_report import (
     export_cycle_artifacts,
@@ -94,6 +101,22 @@ def build_parser() -> argparse.ArgumentParser:
     alpha.add_argument("--slippage-rate", type=float, default=0.0005)
     alpha.add_argument("--train-fraction", type=float, default=0.60)
 
+    core_top5 = subparsers.add_parser(
+        "core-top5",
+        help="TOP5核心池牛市激进轮动、关键位杠杆与熊市自适应做空",
+    )
+    core_top5.add_argument("--data-dir", type=Path, default=Path("data/okx"))
+    core_top5.add_argument("--output-dir", type=Path, default=Path("reports"))
+    core_top5.add_argument("--symbols", nargs="+", default=list(CORE_TOP5_SYMBOLS))
+    core_top5.add_argument("--fee-rate", type=float, default=0.001)
+    core_top5.add_argument("--slippage-rate", type=float, default=0.0005)
+    core_top5.add_argument("--train-fraction", type=float, default=0.60)
+    core_top5.add_argument(
+        "--artifact-dir",
+        type=Path,
+        default=Path("/opt/cursor/artifacts/core-top5"),
+    )
+
     cycle = subparsers.add_parser("cycle-report", help="2021-2026全周期与beta分段详细报告")
     cycle.add_argument("--data-dir", type=Path, default=Path("data/okx"))
     cycle.add_argument("--output-dir", type=Path, default=Path("reports"))
@@ -151,6 +174,8 @@ def main(argv: list[str] | None = None) -> int:
         return _optimize(args)
     if args.command == "crypto-alpha":
         return _crypto_alpha(args)
+    if args.command == "core-top5":
+        return _core_top5(args)
     if args.command == "cycle-report":
         return _cycle_report(args)
     if args.command == "ema-research":
@@ -290,6 +315,40 @@ def _crypto_alpha(args: argparse.Namespace) -> int:
         manifest,
     )
     print(f"加密增强研究完成：{args.output_dir / 'crypto_alpha_report.md'}")
+    return 0
+
+
+def _core_top5(args: argparse.Namespace) -> int:
+    """运行 TOP5 激进轮动研究并导出报告、JSON 和验证图。
+
+    命令只加载用户指定的五个核心标的，随后执行训练期选型和锁定参数的
+    样本外评价。报告与图片同时复制到 artifact 目录，便于在不重跑研究
+    的情况下审阅牛市超额及做空降级结论。
+    """
+
+    if len(args.symbols) != 5 or len(set(args.symbols)) != 5:
+        raise ValueError("core-top5 命令必须恰好传入五个互不重复的标的")
+    series = {
+        symbol: load_candles(args.data_dir / f"{symbol}.csv")
+        for symbol in args.symbols
+    }
+    data = align_market_data(series)
+    results = run_core_top5_research(
+        data,
+        fee_rate=args.fee_rate,
+        slippage_rate=args.slippage_rate,
+        train_fraction=args.train_fraction,
+    )
+    json_path = args.output_dir / "core_top5_results.json"
+    report_path = args.output_dir / "core_top5_report.md"
+    chart_path = args.output_dir / "core_top5_validation.png"
+    write_json(json_path, results)
+    write_core_top5_report(report_path, results)
+    plot_core_top5_research(chart_path, results)
+    args.artifact_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(report_path, args.artifact_dir / report_path.name)
+    shutil.copy2(chart_path, args.artifact_dir / chart_path.name)
+    print(f"TOP5 核心轮动研究完成：{report_path}")
     return 0
 
 

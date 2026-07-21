@@ -24,6 +24,7 @@ python3 -m crypto_lab.cli download --start 2021-01-01 --end 2026-07-15
 python3 -m crypto_lab.cli research
 python3 -m crypto_lab.cli optimize
 python3 -m crypto_lab.cli crypto-alpha
+python3 -m crypto_lab.cli core-top5
 python3 -m unittest discover -s tests -v
 ```
 
@@ -32,6 +33,8 @@ python3 -m unittest discover -s tests -v
 - `reports/cross_market_report.md`：首轮迁移原型样本外结论；
 - `reports/optimized_strategies_report.md`：低换手优化策略设计与验证；
 - `reports/crypto_alpha_report.md`：BTC门控/轮动/对冲增强，冲击年化15%+夏普1+；
+- `reports/core_top5_report.md`：TOP5 核心池激进轮动、关键位杠杆及做空降级验证；
+- `reports/core_top5_validation.png`：TOP5 方案净值与锁定参数后的状态分段对比；
 - `reports/crypto_alpha_results.json`：增强策略参数与目标达成明细；
 - `reports/optimized_backtest_results.json`：优化策略全部参数及训练/样本外指标；
 - `reports/backtest_results.json`：首轮策略参数及训练/样本外指标；
@@ -52,6 +55,18 @@ python3 -m unittest discover -s tests -v
 
 判定规则：默认与优化参数样本外均需 CAGR、Sharpe 为正，才记为稳健候选；Bootstrap CAGR 95% CI 下界大于 0 才记为统计通过。
 
+## TOP5 激进牛熊轮动
+
+`core-top5` 固定使用 BTC、ETH、SOL、XRP、DOGE 五个大市值/高流动性核心标的，
+不根据全样本事后收益换池。牛市需 BTC 长趋势、快慢均线、正动量和核心池广度
+共同确认，再集中轮动至长短动量最强的 1–2 个标的；只有 BTC 收盘突破此前
+55 日最高收盘价时，名义总敞口上限才由 1 倍放宽至 1.3–1.5 倍候选范围。
+
+熊市模块只做空跌破趋势且动量显著为负的最弱核心标的。每次启用前会用已发生
+行情回放最近 90 日影子空头，扣除换手和借券成本；净收益、有效天数或胜率不达标
+则当期空仓。研究阶段还会比较两个训练折中的做空与现金表现，贡献不稳定时把推荐
+方案全局降级为熊市现金。参数选择只使用前 60% 数据，后 40% 仅作最终评价。
+
 ## 回测约束
 
 - T-1 收盘后生成目标权重，获得 T 日 close-to-close 收益，禁止未来数据；
@@ -59,6 +74,8 @@ python3 -m unittest discover -s tests -v
 - 默认单边手续费 0.10%，滑点 0.05%；
 - 前 60% 样本有限网格选参，后 40% 锁定参数后评价；
 - BTC 现货买入持有为统一基准，按 365 天年化。
+- `core-top5` 使用多空引擎，名义总敞口硬上限 1.5 倍、空头上限 0.5 倍；
+  回测未模拟强平、保证金阶梯和逐币种实时资金费率。
 
 ## 重要限制
 
