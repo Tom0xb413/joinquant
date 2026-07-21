@@ -612,7 +612,7 @@ def write_cta_report(path: Path, results: dict[str, Any], chart_dir: Path, manif
                 "",
                 "## 训练期备选参数（Top）",
                 "",
-                "| 参数 | 训练Sharpe | 训练CAGR | OOS Sharpe | OOS CAGR | 全样本Sharpe |",
+                "| 参数 | 训练Sharpe | 训练CAGR | 评估段Sharpe | 评估段CAGR | 全样本Sharpe |",
                 "|---|---:|---:|---:|---:|---:|",
             ]
         )
