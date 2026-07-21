@@ -328,9 +328,9 @@ def _crypto_alpha(args: argparse.Namespace) -> int:
 def _core_top5(args: argparse.Namespace) -> int:
     """运行 TOP5 激进轮动研究并导出报告、JSON 和验证图。
 
-    命令只加载用户指定的五个核心标的，随后执行训练期选型和锁定参数的
-    样本外评价。报告与图片同时复制到 artifact 目录，便于在不重跑研究
-    的情况下审阅牛市超额及做空降级结论。
+    命令只加载固定五个核心标的，随后执行训练期选型和开发后验证集评价。
+    报告与图片同时复制到 artifact 目录，便于在不重跑研究的情况下审阅
+    牛市超额、训练资格及做空降级结论。
     """
 
     if set(args.symbols) != set(CORE_TOP5_SYMBOLS) or len(args.symbols) != 5:

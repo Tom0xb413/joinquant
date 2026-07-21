@@ -11,6 +11,7 @@ from crypto_lab.backtest import BacktestResult
 from crypto_lab.core_top5 import CORE_TOP5_SYMBOLS, CoreTop5RegimeRotation
 from crypto_lab.core_top5_research import _regime_metrics
 from crypto_lab.data import MarketData
+from crypto_lab.long_short import LongShortLimits, run_long_short_backtest
 
 
 def sample_bull_market(days: int = 520) -> MarketData:
@@ -146,12 +147,12 @@ class CoreTop5Tests(unittest.TestCase):
         self.assertAlmostEqual(float(np.sum(np.abs(weights))), 1.0, places=8)
 
     def test_bear_market_falls_back_to_cash_without_short_evidence(self):
-        """影子空头独立交易数不足时，确认熊市也必须返回全现金。"""
+        """影子空头连续持仓 episode 不足时，确认熊市也必须返回全现金。"""
 
         data = sample_bear_market()
         strategy = compact_strategy(
             short_momentum_threshold=-0.01,
-            short_min_trades=100,
+            short_min_episodes=100,
         )
         weights = strategy.target_weights(
             data,
@@ -168,7 +169,7 @@ class CoreTop5Tests(unittest.TestCase):
             short_gross=0.30,
             rebalance_days=7,
             short_momentum_threshold=-0.01,
-            short_min_trades=2,
+            short_min_episodes=1,
             short_min_return=0.0,
             short_min_win_rate=0.50,
         )
@@ -187,7 +188,7 @@ class CoreTop5Tests(unittest.TestCase):
         strategy = compact_strategy(
             rebalance_days=7,
             short_momentum_threshold=-0.01,
-            short_min_trades=2,
+            short_min_episodes=1,
             short_min_return=0.0,
         )
         index = 420
@@ -199,6 +200,58 @@ class CoreTop5Tests(unittest.TestCase):
         changed.open[index + 1 :] *= 0.05
         after = strategy.short_edge_stats(changed, index)
         self.assertEqual(before, after)
+
+    def test_shadow_short_return_matches_real_engine_path(self):
+        """影子窗口净收益必须逐日匹配相同规则在真实多空引擎中的结果。"""
+
+        data = sample_bear_market()
+        strategy = compact_strategy(
+            rebalance_days=7,
+            short_momentum_threshold=-0.01,
+            short_min_episodes=1,
+            short_min_return=-1.0,
+        )
+
+        class RawShortStrategy:
+            """绕过收益门控，仅执行影子模块的原始空头目标。
+
+            @author Cursor
+            @since 0.2.0
+            """
+
+            name = "raw_short_path"
+
+            def target_weights(self, market, signal_index, previous):
+                """按生产调仓相位生成原始空头，用于与影子回放逐日对照。"""
+
+                if signal_index % strategy.rebalance_days != 0:
+                    return previous
+                if strategy.market_regime(market, signal_index) != "bear":
+                    return np.zeros(len(market.symbols))
+                return strategy._raw_short_weights(
+                    market,
+                    signal_index,
+                    strategy._core_indices(market),
+                    strategy.short_gross,
+                )
+
+        result = run_long_short_backtest(
+            data,
+            RawShortStrategy(),
+            fee_rate=0.001,
+            slippage_rate=0.0005,
+            limits=LongShortLimits(
+                max_gross_exposure=1.5,
+                max_net_exposure=1.5,
+                max_short_exposure=0.30,
+                borrow_rate_daily=0.00005,
+            ),
+        )
+        index = 420
+        start = index - strategy.short_edge_window + 1
+        expected = float(np.prod(1.0 + result.daily_returns[start : index + 1]) - 1.0)
+        actual = strategy.short_edge_stats(data, index).total_return
+        self.assertAlmostEqual(actual, expected, places=12)
 
     def test_future_prices_cannot_change_current_signal(self):
         """修改信号日之后的所有价格不得改变当前目标权重，防止未来泄漏。"""

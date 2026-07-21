@@ -1,4 +1,4 @@
-"""TOP5 激进轮动策略的训练期选型、做空降级与样本外报告。"""
+"""TOP5 激进轮动策略的训练期选型、做空降级与开发后验证报告。"""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ LONG_CONFIGS: tuple[dict[str, Any], ...] = tuple(
 )
 
 DEFAULT_TRAIN_END = date(2024, 4, 27)
-OOS_MACRO_BULL_END = date(2025, 10, 6)
+VALIDATION_MACRO_BULL_END = date(2025, 10, 6)
 
 
 def run_core_top5_research(
@@ -38,20 +38,21 @@ def run_core_top5_research(
     slippage_rate: float = 0.0005,
     train_end: date = DEFAULT_TRAIN_END,
 ) -> dict[str, Any]:
-    """仅用训练期选择牛市参数和是否启用做空，再做一次样本外评价。
+    """仅用固定训练段选择参数和做空开关，再评价开发后验证集。
 
     第一阶段比较有限的持仓数、调仓频率、波动率目标和杠杆上限，以两个
     训练折中较弱的因果 risk-on 日历贡献超额 CAGR 为主要目标。第二阶段
     固定多头参数，对比自适应做空与熊市现金；只有做空在两个训练折及完整
     训练期均改善熊市收益，且未明显恶化全局夏普和回撤时才启用。固定
-    截止日之后的样本外结果不参与任何选择。
+    固定截止日之后的结果不参与程序化选择，但开发过程已查看该区间，因此
+    最终报告将其诚实标记为开发后验证，而不是未触碰 forward OOS。
     """
 
     _validate_research_inputs(data, train_end)
     train_indices = [index for index, day in enumerate(data.dates) if day <= train_end]
     split_index = train_indices[-1] + 1
     if len(data.dates) - split_index < 180:
-        raise ValueError("样本外区间至少需要 180 天")
+        raise ValueError("开发后验证区间至少需要 180 天")
     warmup = 220
     mid_index = warmup + (split_index - warmup) // 2
     folds = ((warmup, mid_index - 1), (mid_index, split_index - 1))
@@ -191,7 +192,7 @@ def run_core_top5_research(
     risk_on_excess = (
         recommended_risk_on_test["cagr"] - benchmark_risk_on_test["cagr"]
     )
-    macro_bull_end = min(OOS_MACRO_BULL_END, test_end)
+    macro_bull_end = min(VALIDATION_MACRO_BULL_END, test_end)
     if macro_bull_end > test_start:
         recommended_macro_bull = recommended_result.metrics_dict(
             test_start,
@@ -213,6 +214,7 @@ def run_core_top5_research(
             "short_fallback": "影子空头滚动净收益/胜率不达标则在线空仓；训练期贡献不稳则全局禁用做空",
             "risk_on_metric": "非风险开启日按现金零收益保留在完整日历中，再计算贡献 CAGR；另列条件累计收益",
             "macro_bull_metric": "2024-04-28 至 2025-10-06 为事后历史分段，只用于最终评价、不参与选参",
+            "evaluation_status": "开发后验证集；规则曾在查看该区间后修订，不能视为未触碰 forward OOS",
             "fee_rate_one_way": fee_rate,
             "slippage_rate_one_way": slippage_rate,
             "borrow_rate_daily": limits.borrow_rate_daily,
@@ -238,14 +240,19 @@ def run_core_top5_research(
             ),
             "long_candidates_qualified_both_folds": sum(int(item[1]) for item in ranked),
             "selected_was_qualified": long_qualified,
-            "objective": "min(bull excess)+0.4*mean(bull excess)+0.15*min(sharpe)-0.25*max(MDD)",
+            "objective": "min(risk-on excess)+0.4*mean(risk-on excess)+0.15*min(sharpe)-0.25*max(MDD)",
             "selected_training": selected_training,
+            "qualification_status": (
+                "qualified" if long_qualified else "exploratory_not_qualified"
+            ),
         },
-        "recommended_parameters": _strategy_params(recommended_strategy),
+        "selected_parameters": _strategy_params(recommended_strategy),
         "short_module": {
             **short_decision,
             "cash_bear_test": cash_bear_test,
             "adaptive_short_bear_test": short_bear_test,
+            "cash_full_test": cash_result.metrics_dict(test_start, test_end),
+            "adaptive_short_full_test": short_result.metrics_dict(test_start, test_end),
         },
         "benchmark": {
             "train": benchmark.metrics_dict(train_start, locked_train_end),
@@ -278,25 +285,27 @@ def run_core_top5_research(
             "BTC buy-and-hold": [float(value) for value in benchmark.equity],
             "TOP5 cash-fallback": [float(value) for value in cash_result.equity],
             "TOP5 adaptive-short": [float(value) for value in short_result.equity],
-            "TOP5 recommended": [float(value) for value in recommended_result.equity],
+            "TOP5 selected": [float(value) for value in recommended_result.equity],
         },
         "dates": [day.isoformat() for day in data.dates],
     }
 
 
 def write_core_top5_report(path: Path, results: dict[str, Any]) -> None:
-    """生成包含规则、训练选择、样本外表现和风险边界的 Markdown 报告。
+    """生成包含规则、训练选择、开发后验证表现和风险边界的报告。
 
-    报告明确区分训练选择与样本外评价，并同时展示空仓及自适应做空结果，
+    报告明确区分训练选择与开发后验证，并同时展示空仓及自适应做空结果，
     使读者能检查做空模块是否真正增加熊市收益，而非只看最终组合总收益。
     """
 
     strategy = results["strategy"]
     benchmark = results["benchmark"]
     short = results["short_module"]
-    params = results["recommended_parameters"]
+    params = results["selected_parameters"]
     exposure = strategy["oos_exposure"]
     decision = "启用自适应做空" if short["enabled"] else "做空未通过，熊市退回现金"
+    qualification_passed = results["selection"]["selected_was_qualified"]
+    title_suffix = "" if qualification_passed else "（探索性、训练资格未通过）"
     macro_row = (
         _comparison_row(
             "事后宏观牛段",
@@ -308,7 +317,7 @@ def write_core_top5_report(path: Path, results: dict[str, Any]) -> None:
         else "| 事后宏观牛段 | N/A | N/A | N/A | N/A | N/A |"
     )
     lines = [
-        "# TOP5 核心池激进牛熊轮动策略",
+        f"# TOP5 核心池激进牛熊轮动策略{title_suffix}",
         "",
         "## 最终规则",
         "",
@@ -316,8 +325,9 @@ def write_core_top5_report(path: Path, results: dict[str, Any]) -> None:
         "- 牛市基础仓：BTC 站上慢趋势且长动量为正；宽度不足时持有 BTC，避免错过主升浪。",
         "- 轮动：快均线和核心池广度确认后，按长短动量排名并逆波动持有最强标的。",
         (
-            f"- 杠杆：仅 BTC 突破此前 55 日最高收盘价时，名义敞口进入 "
-            f"`{params['breakout_min_gross']:.2f}–{params['leveraged_max_gross']:.2f}` 倍区间。"
+            f"- 杠杆：BTC 在调仓信号日突破此前 55 日最高收盘价时，名义敞口进入 "
+            f"`{params['breakout_min_gross']:.2f}–{params['leveraged_max_gross']:.2f}` 倍区间，"
+            f"最长持有至下一次 `{params['rebalance_days']}` 日调仓。"
         ),
         "- 熊市：只做空跌破趋势且长动量显著为负的最弱核心资产。",
         "- 双重熔断：滚动影子空头不达收益/胜率门槛则当期空仓；训练贡献不稳则全局禁用。",
@@ -328,13 +338,18 @@ def write_core_top5_report(path: Path, results: dict[str, Any]) -> None:
         f"形成 `{results['selection']['unique_return_paths']}` 条不同收益路径；"
         f"双折均跑赢 BTC 的候选 `{results['selection']['long_candidates_qualified_both_folds']}` 组。",
         f"- 做空结论：**{decision}**。",
-        f"- 推荐参数：`{params}`",
+        (
+            "- 训练资格：**通过，可进入后续 forward 验证**。"
+            if qualification_passed
+            else "- 训练资格：**未通过**；以下仅为最高分探索性候选，不构成正式推荐。"
+        ),
+        f"- 探索性选中参数：`{params}`",
         "",
-        "## 样本外结果",
+        "## 开发后验证集结果",
         "",
         "| 区间/状态 | 策略 CAGR | BTC CAGR | 超额 | 策略 Sharpe | 策略最大回撤 |",
         "|---|---:|---:|---:|---:|---:|",
-        _comparison_row("完整样本外", strategy["test"], benchmark["test"]),
+        _comparison_row("完整开发后验证集", strategy["test"], benchmark["test"]),
         macro_row,
         _comparison_row(
             "因果 risk-on 日历贡献",
@@ -347,7 +362,7 @@ def write_core_top5_report(path: Path, results: dict[str, Any]) -> None:
             f"`{'是' if strategy['macro_bull_beats_btc'] else '否'}`；"
             f"超额 CAGR `{strategy['macro_bull_excess_cagr']:+.1%}`。"
             if strategy["macro_bull_beats_btc"] is not None
-            else "- 当前样本外没有完整宏观牛段。"
+            else "- 当前开发后验证集没有完整宏观牛段。"
         ),
         f"- 因果 risk-on 的完整日历贡献超额 CAGR `{strategy['risk_on_excess_cagr']:+.1%}`；"
         f"其中活跃 `{strategy['risk_on_test']['state_observations']}` 天，"
@@ -355,7 +370,11 @@ def write_core_top5_report(path: Path, results: dict[str, Any]) -> None:
         f"- 熊市状态策略 CAGR `{strategy['bear_test']['cagr']:.1%}`；"
         f"现金方案 `{short['cash_bear_test']['cagr']:.1%}`；"
         f"自适应做空方案 `{short['adaptive_short_bear_test']['cagr']:.1%}`。",
-        f"- 样本外实际最大总敞口 `{exposure['max_gross']:.3f}` 倍；"
+        f"- 完整验证集现金方案 CAGR/Sharpe "
+        f"`{short['cash_full_test']['cagr']:.1%}/{short['cash_full_test']['sharpe']:.2f}`；"
+        f"自适应做空 `{short['adaptive_short_full_test']['cagr']:.1%}/"
+        f"{short['adaptive_short_full_test']['sharpe']:.2f}`。",
+        f"- 验证集实际最大总敞口 `{exposure['max_gross']:.3f}` 倍；"
         f"杠杆日 `{exposure['leveraged_days']}`；最大空头 `{exposure['max_short']:.3f}` 倍。",
         "",
         "## 风险边界",
@@ -363,7 +382,8 @@ def write_core_top5_report(path: Path, results: dict[str, Any]) -> None:
         "- 这是研究原型，不是收益承诺；激进目标不等于每个牛市切片都必然跑赢 BTC。",
         "- 固定当期大市值币池存在幸存者偏差，不能把当前 TOP5 身份回填为历史事实。",
         "- 日线回测无法模拟盘中强平、跳空、交易所保证金阶梯和逐币种资金费率。",
-        "- 样本外仍只有一个完整市场路径；上线前应做滚动仿真、资金容量和极端滑点压力测试。",
+        "- 当前验证区间已在开发过程中被查看；只有 2026-07-15 之后新增数据可作为新的 forward OOS。",
+        "- 验证集仍只有一个完整市场路径；上线前应做滚动仿真、资金容量和极端滑点压力测试。",
         "",
     ]
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -371,11 +391,11 @@ def write_core_top5_report(path: Path, results: dict[str, Any]) -> None:
 
 
 def plot_core_top5_research(path: Path, results: dict[str, Any]) -> Path:
-    """绘制全样本净值与样本外状态 CAGR，提供可快速审阅的验证图。
+    """绘制全样本净值与开发后验证集 CAGR，提供可快速审阅的验证图。
 
     左图使用对数净值比较 BTC、熊市现金和自适应做空方案；右图只展示
-    已锁定参数后的样本外完整、牛市与熊市 CAGR，避免把训练拟合图误当
-    成最终证据。
+    固定训练截止日后的完整、宏观牛段与 risk-on 贡献 CAGR。由于开发中
+    已查看过该区间，图标题明确标为开发后验证而非未触碰样本外。
     """
 
     import matplotlib
@@ -397,7 +417,7 @@ def plot_core_top5_research(path: Path, results: dict[str, Any]) -> Path:
     axes[0].grid(True, which="both", alpha=0.25)
     axes[0].legend(fontsize=8)
 
-    labels = ["Full OOS", "Macro bull", "Risk-on contribution"]
+    labels = ["Full dev validation", "Macro bull", "Risk-on contribution"]
     strategy_cagr = [
         strategy["test"]["cagr"] * 100,
         (
@@ -423,7 +443,7 @@ def plot_core_top5_research(path: Path, results: dict[str, Any]) -> Path:
     axes[1].set_xticks(x)
     axes[1].set_xticklabels(labels)
     axes[1].set_ylabel("CAGR %")
-    axes[1].set_title("Locked-parameter out-of-sample results")
+    axes[1].set_title("Post-development validation (not untouched OOS)")
     axes[1].axhline(0, color="#555555", linewidth=1)
     axes[1].grid(True, axis="y", alpha=0.25)
     axes[1].legend(fontsize=8)
@@ -658,7 +678,7 @@ def _validate_research_inputs(data: MarketData, train_end: date) -> None:
     """验证研究所需核心池、样本长度和固定训练截止日。
 
     研究至少需要 900 天，以覆盖 200 日慢趋势预热、两个训练折和独立样本
-    外区间；截止日必须落在样本内部，确保参数选择区和最终评价区不重叠。
+    开发后验证区间；截止日必须落在样本内部，确保程序化选择区和评价区不重叠。
     """
 
     missing = [symbol for symbol in CORE_TOP5_SYMBOLS if symbol not in data.symbols]
@@ -669,4 +689,4 @@ def _validate_research_inputs(data: MarketData, train_end: date) -> None:
     train_days = sum(day <= train_end for day in data.dates)
     test_days = len(data.dates) - train_days
     if train_days < 500 or test_days < 180:
-        raise ValueError("固定训练截止日必须保留至少 500 天训练和 180 天样本外数据")
+        raise ValueError("固定训练截止日必须保留至少 500 天训练和 180 天验证数据")

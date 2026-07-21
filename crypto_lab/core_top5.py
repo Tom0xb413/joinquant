@@ -39,7 +39,7 @@ class ShortEdgeStats:
     """
 
     active_days: int
-    trades: int
+    episodes: int
     total_return: float
     win_rate: float
     approved: bool
@@ -84,7 +84,7 @@ class CoreTop5RegimeRotation:
     short_gross: float = 0.30
     short_momentum_threshold: float = -0.12
     short_edge_window: int = 90
-    short_min_trades: int = 3
+    short_min_episodes: int = 3
     short_min_return: float = 0.01
     short_min_win_rate: float = 0.50
     shadow_cost_rate: float = 0.0015
@@ -129,8 +129,8 @@ class CoreTop5RegimeRotation:
             raise ValueError("breadth_min 必须位于 [0, 1]")
         if not 0.0 <= self.short_min_win_rate <= 1.0:
             raise ValueError("short_min_win_rate 必须位于 [0, 1]")
-        if self.short_min_trades < 1:
-            raise ValueError("short_min_trades 必须为正整数")
+        if self.short_min_episodes < 1:
+            raise ValueError("short_min_episodes 必须为正整数")
         if self.vol_target <= 0 or self.base_min_gross <= 0:
             raise ValueError("波动率目标和基础总敞口必须为正数")
         if self.base_min_gross > self.base_max_gross:
@@ -248,10 +248,10 @@ class CoreTop5RegimeRotation:
     def short_edge_stats(self, data: MarketData, signal_index: int) -> ShortEdgeStats:
         """回放最近窗口的影子空头并判断其净收益是否稳定。
 
-        影子组合使用与真实策略相同的调仓相位、空头敞口、权重漂移和成本，
-        并按调仓持有区间统计独立交易胜率。至少满足交易次数、累计净收益
-        及胜率三个门槛才批准下一期真实小额空头，否则策略转为现金。回放
-        不读取 ``signal_index`` 之后的数据，因此不会泄漏未来空头收益。
+        影子组合使用与真实策略相同的调仓相位、空头敞口、权重漂移、次日
+        裁剪和成本，并按连续持仓 episode 统计胜率。至少满足 episode 数、
+        累计净收益及胜率三个门槛才批准下一期真实小额空头，否则转为现金。
+        回放不读取 ``signal_index`` 之后的数据，因此不会泄漏未来收益。
         """
 
         core = self._core_indices(data)
@@ -259,8 +259,9 @@ class CoreTop5RegimeRotation:
         simulation_start = max(1, start - self.rebalance_days)
         previous = np.zeros(len(data.symbols), dtype=float)
         shadow_returns: list[float] = []
-        trade_returns: list[float] = []
-        current_trade_returns: list[float] | None = None
+        episode_returns: list[float] = []
+        current_episode_returns: list[float] | None = None
+        episode_signature: tuple[int, ...] = ()
         active_days = 0
         for held_day in range(simulation_start, signal_index + 1):
             signal_day = held_day - 1
@@ -287,23 +288,26 @@ class CoreTop5RegimeRotation:
                 - short_notional * self.shadow_borrow_rate_daily
             )
             if held_day >= start:
-                if is_rebalance and current_trade_returns:
-                    trade_returns.append(
-                        float(np.prod(1.0 + np.asarray(current_trade_returns)) - 1.0)
-                    )
-                    current_trade_returns = None
+                target_signature = tuple(int(index) for index in np.flatnonzero(target < 0))
                 shadow_returns.append(max(net_return, -1.0))
-                if short_notional > 0:
+                if current_episode_returns is not None and target_signature != episode_signature:
+                    if not target_signature:
+                        current_episode_returns.append(net_return)
+                    episode_returns.append(
+                        float(np.prod(1.0 + np.asarray(current_episode_returns)) - 1.0)
+                    )
+                    current_episode_returns = None
+                    episode_signature = ()
+                if target_signature:
                     active_days += 1
-                    if current_trade_returns is None:
-                        current_trade_returns = []
-                    current_trade_returns.append(net_return)
-            previous = self._cap_short_gross(
-                _drift_weights(target, asset_returns, gross_return)
-            )
-        if current_trade_returns:
-            trade_returns.append(
-                float(np.prod(1.0 + np.asarray(current_trade_returns)) - 1.0)
+                    if current_episode_returns is None:
+                        current_episode_returns = []
+                        episode_signature = target_signature
+                    current_episode_returns.append(net_return)
+            previous = _drift_weights(target, asset_returns, gross_return)
+        if current_episode_returns:
+            episode_returns.append(
+                float(np.prod(1.0 + np.asarray(current_episode_returns)) - 1.0)
             )
 
         total_return = (
@@ -311,18 +315,18 @@ class CoreTop5RegimeRotation:
             if shadow_returns
             else 0.0
         )
-        trades = len(trade_returns)
+        episodes = len(episode_returns)
         win_rate = (
-            float(np.mean(np.asarray(trade_returns, dtype=float) > 0))
-            if trade_returns
+            float(np.mean(np.asarray(episode_returns, dtype=float) > 0))
+            if episode_returns
             else 0.0
         )
         approved = (
-            trades >= self.short_min_trades
+            episodes >= self.short_min_episodes
             and total_return >= self.short_min_return
             and win_rate >= self.short_min_win_rate
         )
-        return ShortEdgeStats(active_days, trades, total_return, win_rate, approved)
+        return ShortEdgeStats(active_days, episodes, total_return, win_rate, approved)
 
     def _cap_short_gross(self, weights: np.ndarray) -> np.ndarray:
         """把影子空头漂移权重裁剪回真实模块的名义空头上限。
