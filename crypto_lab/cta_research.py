@@ -35,21 +35,22 @@ PARAM_GRID = {
     "rebalance_bars": [12],
     "rebalance_phase": [0],
     "rank_buffer": [0, 1],
-    "vol_target": [0.22, 0.26, 0.30],
-    "atr_stop_mult": [2.8, 3.2],
-    "max_asset_weight": [0.50, 0.60],
+    "vol_target": [0.23, 0.25, 0.26],
+    "atr_stop_mult": [2.8],
+    "stop_cooldown_bars": [6],
+    "max_asset_weight": [0.60],
     "min_score": [0.48],
-    "exit_score": [0.35],
+    "exit_score": [0.25, 0.35],
     "half_risk_scale": [0.50],
-    "breadth_threshold": [0.20, 1.0 / 3.0],
-    "breadth_risk_scale": [0.60, 0.75],
+    "breadth_threshold": [0.20],
+    "breadth_risk_scale": [0.60],
     "correlation_aware": [False],
-    "dd_soft": [0.12, 0.14],
-    "dd_hard": [0.20],
-    "dd_min_scale": [0.40],
+    "dd_soft": [0.09, 0.11],
+    "dd_hard": [0.17, 0.18],
+    "dd_min_scale": [0.20, 0.25],
     "dd_cooldown_bars": [36],
     "dd_recover_scale": [1.0],
-    "dd_reentry": [0.06],
+    "dd_reentry": [0.05],
 }
 
 
@@ -129,29 +130,29 @@ def run_cta_research(
             continue
         if train.cagr < 0.08 or train.sharpe < 0.55:
             continue
-        # 训练期硬约束：优先把 MDD 压到 30% 内，再在前列中偏好 ≤25%
-        if train.max_drawdown > 0.30:
+        # 训练期预留约 2 个百分点风险缓冲，避免用全样本 MDD 反向挑参数。
+        if train.max_drawdown > 0.23:
             continue
         score = (
             min(fold1.sharpe, fold2.sharpe)
             + 0.45 * train.sharpe
             + 0.30 * min(train.cagr, 0.8)
             - 1.20 * train.max_drawdown
-            - (0.35 if train.max_drawdown > 0.25 else 0.0)
+            - (0.35 if train.max_drawdown > 0.22 else 0.0)
         )
         ranked.append((score, strategy, result))
     ranked.sort(key=lambda x: x[0], reverse=True)
     if ranked:
-        # 训练期前列中，优先满足 MDD≤25%，其次夏普与适中杠杆
+        # 推荐完全由训练期排序产生；全样本和测试段仅在参数冻结后评价。
         best_strategy, best_result = ranked[0][1], ranked[0][2]
         for _, strategy, result in ranked[:40]:
             train = result.metrics(0, train_end)
             if (
                 strategy.top_k <= 5
                 and strategy.vol_target <= 0.36
-                and train.max_drawdown <= 0.25
-                and train.sharpe >= 0.70
-                and train.cagr >= 0.12
+                and train.max_drawdown <= 0.23
+                and train.sharpe >= 0.90
+                and train.cagr >= 0.14
             ):
                 best_strategy, best_result = strategy, result
                 break
@@ -197,6 +198,7 @@ def run_cta_research(
         "rank_buffer": recommended.rank_buffer,
         "vol_target": recommended.vol_target,
         "atr_stop_mult": recommended.atr_stop_mult,
+        "stop_cooldown_bars": recommended.stop_cooldown_bars,
         "min_score": recommended.min_score,
         "exit_score": recommended.exit_score,
         "max_gross": recommended.max_gross,
@@ -250,6 +252,48 @@ def run_cta_research(
             }
         )
 
+    ablations = []
+    for label, strategy in (
+        ("recommended", recommended),
+        ("no_breadth_scaling", replace(recommended, breadth_threshold=0.0)),
+        ("no_rank_buffer", replace(recommended, rank_buffer=0)),
+        (
+            "no_drawdown_overlay",
+            replace(
+                recommended,
+                dd_soft=0.99,
+                dd_hard=0.999,
+                dd_reentry=0.99,
+                dd_min_scale=1.0,
+                dd_cooldown_bars=1,
+            ),
+        ),
+        ("correlation_aware_risk", replace(recommended, correlation_aware=True)),
+    ):
+        result = run_cta_backtest(strategy, fee_rate, slippage_rate)
+        ablations.append(
+            {
+                "name": label,
+                "full": asdict_metrics(result.metrics()),
+                "test": asdict_metrics(result.metrics(test_start)),
+            }
+        )
+
+    phase_full_cagr = [row["full"]["cagr"] for row in phase_sensitivity]
+    phase_full_mdd = [row["full"]["max_drawdown"] for row in phase_sensitivity]
+    phase_test_cagr = [row["test"]["cagr"] for row in phase_sensitivity]
+    phase_test_mdd = [row["test"]["max_drawdown"] for row in phase_sensitivity]
+    phase_summary = {
+        "full_cagr_median": float(np.median(phase_full_cagr)),
+        "full_cagr_min": float(np.min(phase_full_cagr)),
+        "full_mdd_median": float(np.median(phase_full_mdd)),
+        "full_mdd_max": float(np.max(phase_full_mdd)),
+        "test_cagr_median": float(np.median(phase_test_cagr)),
+        "test_cagr_min": float(np.min(phase_test_cagr)),
+        "test_mdd_median": float(np.median(phase_test_mdd)),
+        "test_mdd_max": float(np.max(phase_test_mdd)),
+    }
+
     payload = {
         "methodology": {
             "style": "Institutional multi-asset momentum CTA",
@@ -266,8 +310,9 @@ def run_cta_research(
                 "market-breadth risk scaling and per-asset concentration cap",
                 "portfolio drawdown circuit: soft delever + hard flatten cooldown + signal-based re-entry (no permanent lock)",
             ],
-            "selection": "train dual-fold only; MDD<=30% hard filter; final test never participates in selection/fallback",
+            "selection": "train dual-fold only; train MDD<=23% risk-margin filter; final evaluation segment never participates in selection/fallback",
             "risk_budget": "target full-sample MDD<=25% while preserving CAGR (sacrifice at most ~3-5pp vs prior ~22% CAGR baseline)",
+            "test_disclosure": "The chronological evaluation segment is excluded from the current selector, but it was inspected in prior research iterations; it is not a pristine untouched OOS sample.",
             "fee_rate": fee_rate,
             "slippage_rate": slippage_rate,
             "references": [
@@ -294,8 +339,10 @@ def run_cta_research(
         },
         "robustness": {
             "phase_sensitivity": phase_sensitivity,
+            "phase_summary": phase_summary,
             "cost_stress": cost_stress,
             "hard_threshold_sensitivity": hard_threshold_sensitivity,
+            "ablations": ablations,
         },
         "recommended_parameters": rec_params,
         "benchmark": {
@@ -324,6 +371,7 @@ def run_cta_research(
                     "rank_buffer": strat.rank_buffer,
                     "vol_target": strat.vol_target,
                     "atr_stop_mult": strat.atr_stop_mult,
+                    "stop_cooldown_bars": strat.stop_cooldown_bars,
                     "max_asset_weight": strat.max_asset_weight,
                     "min_score": strat.min_score,
                     "exit_score": strat.exit_score,
@@ -438,7 +486,7 @@ def write_cta_report(path: Path, results: dict[str, Any], chart_dir: Path, manif
         f"- 网格测试 `{results['search']['candidates_tested']}`，合格 `{results['search']['candidates_qualified']}`，"
         f"{'回退默认' if results['search']['used_default'] else '采用优化参数'}",
         "",
-        "## 全样本 / 样本外 vs BTC",
+        "## 全样本 / 时间顺序评估段 vs BTC",
         "",
         "| 区间 | CTA CAGR | Sharpe | MDD | 在市 | BTC CAGR | BTC Sharpe | BTC MDD | 超额CAGR |",
         "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
@@ -446,7 +494,7 @@ def write_cta_report(path: Path, results: dict[str, Any], chart_dir: Path, manif
     for label, sm, bm in (
         ("全样本", s["full"], b["full"]),
         ("训练期", s["train"], b["train"]),
-        ("样本外", s["test"], b["test"]),
+        ("评估段*", s["test"], b["test"]),
     ):
         lines.append(
             "| {lab} | {sc:.1%} | {ss:.2f} | {smdd:.1%} | {tim:.0%} | {bc:.1%} | {bs:.2f} | {bmdd:.1%} | {ex:+.1%} |".format(
@@ -464,6 +512,8 @@ def write_cta_report(path: Path, results: dict[str, Any], chart_dir: Path, manif
 
     lines.extend(
         [
+            "",
+            "\\* 评估段未参与本轮选参或回退，但此前研究迭代已查看过该区间，因此不再宣称为严格未触碰 OOS。",
             "",
             "## 图表",
             "",
@@ -493,6 +543,68 @@ def write_cta_report(path: Path, results: dict[str, Any], chart_dir: Path, manif
                 imp=row["mdd_improvement"],
             )
         )
+
+    robustness = results.get("robustness", {})
+    phase = robustness.get("phase_summary")
+    if phase:
+        lines.extend(
+            [
+                "",
+                "## 对抗性稳健性检查",
+                "",
+                "### 调仓相位扰动（全部绝对 UTC 相位）",
+                "",
+                "| 指标 | 全样本中位数 | 全样本最差 | 评估段中位数 | 评估段最差 |",
+                "|---|---:|---:|---:|---:|",
+                "| CAGR | {fmed:.1%} | {fmin:.1%} | {tmed:.1%} | {tmin:.1%} |".format(
+                    fmed=phase["full_cagr_median"],
+                    fmin=phase["full_cagr_min"],
+                    tmed=phase["test_cagr_median"],
+                    tmin=phase["test_cagr_min"],
+                ),
+                "| MDD | {fmed:.1%} | {fmax:.1%} | {tmed:.1%} | {tmax:.1%} |".format(
+                    fmed=phase["full_mdd_median"],
+                    fmax=phase["full_mdd_max"],
+                    tmed=phase["test_mdd_median"],
+                    tmax=phase["test_mdd_max"],
+                ),
+                "",
+                "### 单边成本压力",
+                "",
+                "| 单边成本 | 全样本 CAGR | 全样本 MDD | 评估段 CAGR | 评估段 MDD |",
+                "|---:|---:|---:|---:|---:|",
+            ]
+        )
+        for row in robustness.get("cost_stress", []):
+            lines.append(
+                "| {cost:.2%} | {fc:.1%} | {fm:.1%} | {tc:.1%} | {tm:.1%} |".format(
+                    cost=row["one_way_cost"],
+                    fc=row["full"]["cagr"],
+                    fm=row["full"]["max_drawdown"],
+                    tc=row["test"]["cagr"],
+                    tm=row["test"]["max_drawdown"],
+                )
+            )
+        lines.extend(
+            [
+                "",
+                "### 消融实验",
+                "",
+                "| 版本 | 全样本 CAGR | Sharpe | MDD | 评估段 CAGR | 评估段 MDD |",
+                "|---|---:|---:|---:|---:|---:|",
+            ]
+        )
+        for row in robustness.get("ablations", []):
+            lines.append(
+                "| {name} | {fc:.1%} | {fs:.2f} | {fm:.1%} | {tc:.1%} | {tm:.1%} |".format(
+                    name=row["name"],
+                    fc=row["full"]["cagr"],
+                    fs=row["full"]["sharpe"],
+                    fm=row["full"]["max_drawdown"],
+                    tc=row["test"]["cagr"],
+                    tm=row["test"]["max_drawdown"],
+                )
+            )
 
     if results.get("top_alternatives"):
         lines.extend(
@@ -527,6 +639,7 @@ def write_cta_report(path: Path, results: dict[str, Any], chart_dir: Path, manif
             "- 已消除高周期前视：4H 信号仅使用已收盘的 12H/1D 指标。",
             "- 分层门控（EMA200 满仓 / EMA100 半仓 / 以下空仓）是抗熊的关键。",
             "- 注意：硬熔断阈值对路径较敏感，实盘需把 dd_hard/cooldown 纳入稳健性监控，而非单点最优。",
+            "- 调仓相位压力结果必须与单点结果同时阅读；相位最差值说明历史 MDD≤25% 不是未来风险保证。",
             "",
             "详情：`reports/cta_results.json`",
         ]

@@ -131,23 +131,23 @@ class FastInstitutionalCTA:
     rebalance_bars: int = 12
     rebalance_phase: int = 0
     rank_buffer: int = 1
-    vol_target: float = 0.26
+    vol_target: float = 0.25
     max_gross: float = 1.0
     max_asset_weight: float = 0.60
-    atr_stop_mult: float = 3.0
+    atr_stop_mult: float = 2.8
     stop_cooldown_bars: int = 6
     min_score: float = 0.48
-    exit_score: float = 0.35
-    breadth_threshold: float = 1.0 / 3.0
-    breadth_risk_scale: float = 0.75
+    exit_score: float = 0.25
+    breadth_threshold: float = 0.20
+    breadth_risk_scale: float = 0.60
     correlation_aware: bool = False
     covariance_lookback: int = 48
     # 组合回撤熔断：软降仓 + 硬空仓冷却后按信号全风险再入场（避免永久锁仓）
     # 目标：全样本 MDD≤25%，并尽量保留/提升 CAGR
-    dd_soft: float = 0.14
-    dd_hard: float = 0.19
-    dd_reentry: float = 0.06
-    dd_min_scale: float = 0.40
+    dd_soft: float = 0.11
+    dd_hard: float = 0.17
+    dd_reentry: float = 0.05
+    dd_min_scale: float = 0.20
     dd_cooldown_bars: int = 36  # 4H≈6天；硬熔断后强制空仓的最短冷却
     dd_recover_scale: float = 1.0  # 冷却结束后按原信号恢复；勿在恢复期再套 soft→0
     half_risk_scale: float = 0.50
