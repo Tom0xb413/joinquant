@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}买卖点清单 · {{ brand }}{% endblock %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">{{ brand }}</p>
+    <h1>历史买卖点清单</h1>
+  </div>
+  <div class="topbar-actions">
+    <a class="ghost" href="{{ url_for('dashboard') }}">总览</a>
+    <form method="post" action="{{ url_for('logout') }}">
+      <button class="ghost" type="submit">退出</button>
+    </form>
+  </div>
+</header>
+
+<nav class="nav">
+  <a href="{{ url_for('dashboard') }}">总览</a>
+  <a class="active" href="{{ url_for('trades') }}">买卖点清单</a>
+</nav>
+
+<section class="hero-strip">
+  <div>
+    <p class="eyebrow">TOTAL</p>
+    <strong>{{ summary.count }}</strong>
+  </div>
+  <div>
+    <p class="eyebrow">BUY-LIKE</p>
+    <strong>{{ summary.buy_like }}</strong>
+  </div>
+  <div>
+    <p class="eyebrow">SELL-LIKE</p>
+    <strong>{{ summary.sell_like }}</strong>
+  </div>
+</section>
+
+<section class="panel">
+  <form class="filter-row" method="get">
+    <label>
+      <span>部署</span>
+      <select name="deployment_id" onchange="this.form.submit()">
+        <option value="">全部</option>
+        {% for dep in deployments %}
+        <option value="{{ dep.id }}" {% if selected == dep.id %}selected{% endif %}>{{ dep.id }} ({{ dep.mode }})</option>
+        {% endfor %}
+      </select>
+    </label>
+  </form>
+
+  <div class="symbol-bars">
+    {% for symbol, count in summary.symbols.items() %}
+    <div><span>{{ symbol }}</span><strong>{{ count }}</strong></div>
+    {% else %}
+    <p class="muted">暂无统计</p>
+    {% endfor %}
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>日期</th>
+        <th>部署</th>
+        <th>模式</th>
+        <th>方向</th>
+        <th>标的</th>
+        <th>价格</th>
+        <th>权重</th>
+        <th>备注</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for point in points %}
+      <tr>
+        <td>{{ point.date }}</td>
+        <td>{{ point.deployment_id }}</td>
+        <td>{{ point.mode }}</td>
+        <td>{{ point.side }}</td>
+        <td>{{ point.symbol }}</td>
+        <td>{{ "%.4f"|format(point.price) }}</td>
+        <td>{{ "%.2f"|format(point.weight_from) }} → {{ "%.2f"|format(point.weight_to) }}</td>
+        <td>{{ point.note }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" class="muted">暂无买卖点，点击总览“立即同步”生成</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}登录 · {{ brand }}{% endblock %}
+{% block body %}
+<main class="login-shell">
+  <section class="login-panel">
+    <p class="eyebrow">SECURE ACCESS</p>
+    <h1>{{ brand }}</h1>
+    <p class="lede">策略研究、模拟成交与实盘干跑的统一操作台。请先验证身份。</p>
+    {% if error %}
+    <p class="error">{{ error }}</p>
+    {% endif %}
+    <form method="post" class="login-form" autocomplete="current-password">
+      <label>
+        <span>用户名</span>
+        <input name="username" required autofocus value="admin" />
+      </label>
+      <label>
+        <span>密码</span>
+        <input name="password" type="password" required />
+      </label>
+      <button type="submit">进入操作台</button>
+    </form>
+  </section>
+</main>
+{% endblock %}

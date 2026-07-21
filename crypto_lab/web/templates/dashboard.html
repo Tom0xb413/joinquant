@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}总览 · {{ brand }}{% endblock %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">{{ brand }}</p>
+    <h1>部署总览</h1>
+  </div>
+  <div class="topbar-actions">
+    <span class="user-chip">{{ username }}</span>
+    <form method="post" action="{{ url_for('logout') }}">
+      <button class="ghost" type="submit">退出</button>
+    </form>
+  </div>
+</header>
+
+<nav class="nav">
+  <a class="active" href="{{ url_for('dashboard') }}">总览</a>
+  <a href="{{ url_for('trades') }}">买卖点清单</a>
+  <button id="run-once" class="accent" type="button">立即同步</button>
+</nav>
+
+<section class="hero-strip">
+  <div>
+    <p class="eyebrow">ENGINE</p>
+    <strong id="engine-status">{{ overview.status }}</strong>
+  </div>
+  <div>
+    <p class="eyebrow">TRADE POINTS</p>
+    <strong>{{ overview.trade_summary.count }}</strong>
+  </div>
+  <div>
+    <p class="eyebrow">LIVE ORDERS</p>
+    <strong>{{ "ON" if overview.allow_live_orders else "DRY-RUN" }}</strong>
+  </div>
+</section>
+
+<section class="grid">
+  {% for item in overview.deployments %}
+  {% set snap = item.snapshot or {} %}
+  <a class="deploy-card mode-{{ item.mode }}" href="{{ url_for('deployment_detail', deployment_id=item.id) }}">
+    <div class="card-head">
+      <span class="mode-tag">{{ item.mode }}</span>
+      <span class="status-tag">{{ snap.status or ("off" if not item.enabled else "n/a") }}</span>
+    </div>
+    <h2>{{ item.id }}</h2>
+    <p class="muted">{{ item.strategy }}</p>
+    <dl class="metrics">
+      <div>
+        <dt>权益</dt>
+        <dd>{{ "%.2f"|format(snap.equity or 0) }}</dd>
+      </div>
+      <div>
+        <dt>收益</dt>
+        <dd>{{ "%.2%"|format(snap.total_return or 0) }}</dd>
+      </div>
+      <div>
+        <dt>回撤</dt>
+        <dd>{{ "%.2%"|format(snap.max_drawdown or 0) }}</dd>
+      </div>
+      <div>
+        <dt>夏普</dt>
+        <dd>{{ "%.2f"|format(snap.sharpe or 0) }}</dd>
+      </div>
+    </dl>
+    <p class="foot">{{ snap.message or "等待同步" }} · {{ snap.updated_at or "-" }}</p>
+  </a>
+  {% endfor %}
+</section>
+
+<section class="panel">
+  <h2>可注册策略（便于后续扩展）</h2>
+  <div class="strategy-list">
+    {% for key, spec in catalog.items() %}
+    <article>
+      <h3>{{ spec.title }}</h3>
+      <p>{{ spec.description }}</p>
+      <code>{{ key }}</code>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

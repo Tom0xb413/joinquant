@@ -17,7 +17,7 @@
 
 ## 快速运行
 
-环境要求：Python 3.10+、NumPy 2.4.4+。
+环境要求：Python 3.10+、NumPy 2.4.4+、Flask 3.x（Web 控制台）。
 
 ```bash
 python3 -m crypto_lab.cli download --start 2021-01-01 --end 2026-07-15
@@ -25,7 +25,22 @@ python3 -m crypto_lab.cli research
 python3 -m crypto_lab.cli optimize
 python3 -m crypto_lab.cli crypto-alpha
 python3 -m crypto_lab.cli core-top5
+python3 -m crypto_lab.cli live-console
 python3 -m unittest discover -s tests -v
+```
+
+一键启动模拟盘 + Web（默认 `http://127.0.0.1:8787/`，用户 `admin` / 密码见配置）：
+
+```bash
+cp configs/live_console.example.json configs/live_console.json
+# 修改 auth.password，可选填写 wecom.webhook_url
+python3 -m crypto_lab.cli live-console
+```
+
+仅导出历史买卖点：
+
+```bash
+python3 -m crypto_lab.cli trade-book --output reports/trade_book.json
 ```
 
 输出：
@@ -70,6 +85,25 @@ python3 -m unittest discover -s tests -v
 方案全局降级为熊市现金。训练截止日固定为 2024-04-27，后续新增行情不会回流
 训练集；每个输入 CSV 的 SHA-256 会随结果保存。当前截止 2026-07-15 的区间
 已在开发中被查看，只能称开发后验证集；其后的新增行情才可作为 forward OOS。
+
+## 实盘 / 模拟盘 Web 控制台
+
+`live-console` 提供可扩展的多策略部署台：
+
+| 模式 | 作用 |
+|---|---|
+| `paper` | 用实盘（或本地缓存）行情在本地模拟成交与盈亏 |
+| `live` | 生成实盘信号与意向单；默认干跑，`allow_live_orders=true` 才允许发单适配 |
+| `backtest` | 只读历史买卖点清单，不进入轮询成交 |
+
+能力：
+
+- 登录密码防护的 Web 界面：持仓、权益、收益/回撤/夏普、目标权重、成交与买卖点分析；
+- 企业微信群机器人通知（成交、账户摘要、异常）；
+- 策略注册表（`crypto_lab/live/registry.py`）便于后续继续挂接回测/模拟/实盘部署；
+- 状态落在 `runtime/live/console.db`，重启可恢复。
+
+安全默认：`allow_live_orders=false`；即使打开，在未完成交易所签名下单联调前仍会拒绝真实发单。
 
 ## 回测约束
 
