@@ -116,7 +116,12 @@ def build_indicator_cache(p4: PanelData, p12: PanelData, p1: PanelData) -> Indic
 
 @dataclass
 class FastInstitutionalCTA:
-    """基于预计算缓存的快速机构 CTA。"""
+    """基于预计算缓存的快速机构 CTA。
+
+    策略将信号、基础仓位与组合级风险覆盖层分开处理。这样做是为了避免回撤缩放
+    在非调仓日被重复乘到已缩放仓位上，并让硬熔断期间的影子组合继续产生再入场
+    信号。调仓使用绝对 UTC K 线编号，不再依赖数据文件从哪一根 K 线开始。
+    """
 
     cache: IndicatorCache
     panel_4h: PanelData
@@ -124,11 +129,19 @@ class FastInstitutionalCTA:
     panel_1d: PanelData
     top_k: int = 3
     rebalance_bars: int = 12
+    rebalance_phase: int = 0
+    rank_buffer: int = 1
     vol_target: float = 0.26
     max_gross: float = 1.0
+    max_asset_weight: float = 0.60
     atr_stop_mult: float = 3.0
+    stop_cooldown_bars: int = 6
     min_score: float = 0.48
     exit_score: float = 0.35
+    breadth_threshold: float = 1.0 / 3.0
+    breadth_risk_scale: float = 0.75
+    correlation_aware: bool = False
+    covariance_lookback: int = 48
     # 组合回撤熔断：软降仓 + 硬空仓冷却后按信号全风险再入场（避免永久锁仓）
     # 目标：全样本 MDD≤25%，并尽量保留/提升 CAGR
     dd_soft: float = 0.14
@@ -141,27 +154,42 @@ class FastInstitutionalCTA:
     name: str = "institutional_momentum_cta"
 
     def target_weights(self, index: int, previous: np.ndarray, stop_state: dict) -> tuple[np.ndarray, dict]:
+        """计算未叠加组合回撤覆盖层的基础目标仓位。
+
+        先用持久化 ATR 高点和止损价处理逐资产退出，再在绝对 UTC 调仓时点重新
+        评分。已持仓资产获得一个名次缓冲，减少分数接近时的无效轮换；市场宽度
+        只缩放风险，不直接关闭策略，以保留 BTC 单独领涨行情。
+        """
+
         n = self.panel_4h.n_assets
         if index < 240:
             return np.zeros(n), stop_state
 
         weights = previous.copy()
-        peaks = stop_state.get("peaks")
-        if peaks is not None and np.any(previous > 1e-9):
+        peaks = np.asarray(stop_state.get("peaks", np.zeros(n)), dtype=float).copy()
+        stop_prices = np.asarray(stop_state.get("stop_prices", np.zeros(n)), dtype=float).copy()
+        stop_until = np.asarray(stop_state.get("stop_until", np.zeros(n)), dtype=int).copy()
+        if np.any(previous > 1e-9):
             atr_row = self.cache.atr_4[index]
             for col in range(n):
                 if previous[col] <= 1e-9:
                     continue
-                peaks[col] = max(peaks[col], self.panel_4h.close[index, col])
-                stop = peaks[col] - self.atr_stop_mult * atr_row[col]
-                if self.panel_4h.close[index, col] < stop:
+                peaks[col] = max(peaks[col], self.panel_4h.high[index, col])
+                candidate = peaks[col] - self.atr_stop_mult * atr_row[col]
+                if np.isfinite(candidate):
+                    stop_prices[col] = max(stop_prices[col], candidate)
+                if stop_prices[col] > 0 and self.panel_4h.close[index, col] < stop_prices[col]:
                     weights[col] = 0.0
                     peaks[col] = 0.0
-            stop_state["peaks"] = peaks
-            if index % self.rebalance_bars != 0:
-                return weights, stop_state
-        elif index % self.rebalance_bars != 0:
-            return previous, stop_state
+                    stop_prices[col] = 0.0
+                    stop_until[col] = index + max(1, self.stop_cooldown_bars)
+        stop_state["peaks"] = peaks
+        stop_state["stop_prices"] = stop_prices
+        stop_state["stop_until"] = stop_until
+        if not self._is_rebalance(index):
+            if np.any(weights != previous):
+                stop_state["base_target"] = weights.copy()
+            return weights, stop_state
 
         i1 = int(self.cache.map_1d[index])
         i12 = int(self.cache.map_12h[index])
@@ -184,6 +212,7 @@ class FastInstitutionalCTA:
             active_top_k = max(1, min(2, self.top_k))
         else:
             stop_state["peaks"] = np.zeros(n)
+            stop_state["stop_prices"] = np.zeros(n)
             return np.zeros(n), stop_state
 
         score = self._score_at(index, i1, i12)
@@ -191,11 +220,18 @@ class FastInstitutionalCTA:
         tradable = np.isfinite(score) & (
             (score >= self.min_score) | (held & (score >= self.exit_score))
         )
+        tradable &= index >= stop_until
         if not tradable.any():
             stop_state["peaks"] = np.zeros(n)
+            stop_state["stop_prices"] = np.zeros(n)
             return np.zeros(n), stop_state
         ranked = np.flatnonzero(tradable)
-        selected = ranked[np.argsort(score[ranked])[::-1][: active_top_k]]
+        ranked = ranked[np.argsort(score[ranked])[::-1]]
+        buffer_size = min(len(ranked), active_top_k + max(0, self.rank_buffer))
+        buffered = set(int(x) for x in ranked[:buffer_size])
+        selected_list = [int(x) for x in ranked if held[x] and int(x) in buffered][:active_top_k]
+        selected_list.extend(int(x) for x in ranked if int(x) not in selected_list)
+        selected = np.asarray(selected_list[:active_top_k], dtype=int)
         vols = self.cache.vol_4[index]
         inv = np.zeros(n)
         for col in selected:
@@ -204,19 +240,103 @@ class FastInstitutionalCTA:
         if inv.sum() <= 0:
             return np.zeros(n), stop_state
         raw = inv / inv.sum()
-        port_vol = float(np.sqrt(np.nansum((raw * np.nan_to_num(vols, nan=0.0)) ** 2)))
+        port_vol = self._portfolio_volatility(index, raw, vols)
+
+        valid = np.isfinite(self.cache.ema100_1d[i1]) & np.isfinite(self.cache.mom_1d_20[i1])
+        positive_trends = (
+            valid
+            & (self.panel_1d.close[i1] > self.cache.ema100_1d[i1])
+            & (self.cache.mom_1d_20[i1] > 0)
+        )
+        breadth = float(np.sum(positive_trends) / max(np.sum(valid), 1))
+        if breadth < self.breadth_threshold:
+            risk_scale *= self.breadth_risk_scale
+
         target_vol = self.vol_target * risk_scale
         if port_vol > 1e-8 and target_vol > 0:
             raw *= min(self.max_gross * risk_scale, target_vol / port_vol)
         gross_cap = self.max_gross * risk_scale
+        raw = self._cap_asset_weights(raw, gross_cap)
         if raw.sum() > gross_cap:
             raw *= gross_cap / raw.sum()
-        peaks = np.zeros(n)
+
+        new_peaks = np.zeros(n)
+        new_stops = np.zeros(n)
         for col in range(n):
             if raw[col] > 1e-9:
-                peaks[col] = self.panel_4h.close[index, col]
-        stop_state["peaks"] = peaks
+                if previous[col] > 1e-9 and peaks[col] > 0:
+                    new_peaks[col] = peaks[col]
+                    new_stops[col] = stop_prices[col]
+                else:
+                    new_peaks[col] = self.panel_4h.high[index, col]
+                    atr_now = self.cache.atr_4[index, col]
+                    if np.isfinite(atr_now):
+                        new_stops[col] = new_peaks[col] - self.atr_stop_mult * atr_now
+        stop_state["peaks"] = new_peaks
+        stop_state["stop_prices"] = new_stops
+        stop_state["base_target"] = raw.copy()
         return raw, stop_state
+
+    def _is_rebalance(self, index: int) -> bool:
+        """按绝对 UTC 4H K 线编号判断调仓，消除数据起点相位依赖。"""
+
+        if self.rebalance_bars <= 1:
+            return True
+        four_hours_ms = 4 * 3_600_000
+        absolute_bar = int(self.panel_4h.timestamps_ms[index] // four_hours_ms)
+        return absolute_bar % self.rebalance_bars == self.rebalance_phase % self.rebalance_bars
+
+    def _portfolio_volatility(self, index: int, raw: np.ndarray, vols: np.ndarray) -> float:
+        """估算组合年化波动率。
+
+        默认保留原有对角估计作为对照；启用相关性风险时，使用短窗中位相关系数
+        构造常相关收缩协方差，避免直接反演噪声较大的短窗协方差矩阵。
+        """
+
+        diagonal = float(np.sqrt(np.nansum((raw * np.nan_to_num(vols, nan=0.0)) ** 2)))
+        selected = np.flatnonzero(raw > 1e-9)
+        lookback = max(24, int(self.covariance_lookback))
+        if not self.correlation_aware or len(selected) < 2 or index < lookback:
+            return diagonal
+        prices = self.panel_4h.close[index - lookback : index + 1, selected]
+        log_returns = np.diff(np.log(prices), axis=0)
+        if not np.all(np.isfinite(log_returns)):
+            return diagonal
+        annual_vols = np.std(log_returns, axis=0, ddof=1) * np.sqrt(365.0 * 6.0)
+        correlations = np.corrcoef(log_returns, rowvar=False)
+        off_diagonal = correlations[np.triu_indices(len(selected), 1)]
+        median_correlation = float(np.clip(np.nanmedian(off_diagonal), 0.0, 0.90))
+        covariance = np.outer(annual_vols, annual_vols) * median_correlation
+        np.fill_diagonal(covariance, annual_vols * annual_vols)
+        selected_weights = raw[selected]
+        estimate = float(np.sqrt(selected_weights @ covariance @ selected_weights))
+        return estimate if np.isfinite(estimate) and estimate > 0 else diagonal
+
+    def _cap_asset_weights(self, raw: np.ndarray, gross_cap: float) -> np.ndarray:
+        """限制单币集中度，并把可分配余额迭代分给未触顶资产。"""
+
+        cap = min(max(float(self.max_asset_weight), 0.0), gross_cap)
+        if cap <= 0 or raw.sum() <= 0:
+            return np.zeros_like(raw)
+        target_gross = min(float(raw.sum()), gross_cap)
+        weights = np.zeros_like(raw)
+        remaining = raw.copy()
+        for _ in range(len(raw)):
+            eligible = (remaining > 0) & (weights < cap - 1e-12)
+            if not eligible.any():
+                break
+            budget = target_gross - float(weights.sum())
+            if budget <= 1e-12:
+                break
+            allocation = remaining[eligible] / remaining[eligible].sum() * budget
+            room = cap - weights[eligible]
+            addition = np.minimum(allocation, room)
+            weights[eligible] += addition
+            hit = np.flatnonzero(eligible)[addition >= room - 1e-12]
+            remaining[hit] = 0.0
+            if np.all(addition < room - 1e-12):
+                break
+        return weights
 
     def _score_at(self, i4: int, i1: int, i12: int) -> np.ndarray:
         c = self.cache
@@ -348,7 +468,12 @@ def run_cta_backtest(
     fee_rate: float = 0.001,
     slippage_rate: float = 0.0005,
 ) -> CtaBacktestResult:
-    """4H 面板回测：T 收盘信号，持有至 T+1；叠加组合回撤熔断。"""
+    """运行 4H 面板回测并叠加组合回撤覆盖层。
+
+    信号在 T 收盘后生成并持有至 T+1 收盘。引擎分别维护基础影子仓位和实际执行
+    仓位：回撤覆盖层只缩放后者，避免在非调仓日把风险乘数重复作用于已经缩放过
+    的仓位；硬熔断空仓时，影子仓位仍按信号演化，用于冷却后的再入场。
+    """
 
     panel = strategy.panel_4h
     n_rows, n_cols = panel.size, panel.n_assets
@@ -357,6 +482,7 @@ def run_cta_backtest(
     turnover = np.zeros(n_rows)
     costs = np.zeros(n_rows)
     previous = np.zeros(n_cols)
+    base_previous = np.zeros(n_cols)
     stop_state: dict = {"dd_cooldown": 0, "dd_recovering": False}
     cost_rate = fee_rate + slippage_rate
     asset_rets = np.zeros((n_rows, n_cols))
@@ -365,8 +491,9 @@ def run_cta_backtest(
     peak_equity = 1.0
 
     for index in range(1, n_rows):
-        target, stop_state = strategy.target_weights(index - 1, previous, stop_state)
-        target = np.asarray(target, dtype=float)
+        base_target, stop_state = strategy.target_weights(index - 1, base_previous, stop_state)
+        base_target = np.asarray(base_target, dtype=float)
+        target = base_target.copy()
         # 组合级回撤熔断（仅使用截至上一根的净值，无前视）
         # 硬熔断后：冷却期空仓 → 以 recover_scale 再入场，避免“空仓导致回撤永不收复”的永久锁仓。
         current_dd = 0.0 if peak_equity <= 1e-12 else max(0.0, 1.0 - equity / peak_equity)
@@ -412,6 +539,14 @@ def run_cta_backtest(
         denom = 1.0 + gross
         previous = target * (1.0 + asset_rets[index]) / denom if denom > 0 else np.zeros(n_cols)
         previous[np.abs(previous) < 1e-14] = 0.0
+        base_gross = float(base_target @ asset_rets[index])
+        base_denom = 1.0 + base_gross
+        base_previous = (
+            base_target * (1.0 + asset_rets[index]) / base_denom
+            if base_denom > 0
+            else np.zeros(n_cols)
+        )
+        base_previous[np.abs(base_previous) < 1e-14] = 0.0
 
     return CtaBacktestResult(
         strategy=strategy.name,

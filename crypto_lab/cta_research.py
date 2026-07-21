@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -32,15 +33,21 @@ REGIMES = (
 PARAM_GRID = {
     "top_k": [3],
     "rebalance_bars": [12],
-    "vol_target": [0.26, 0.30, 0.34],
-    "atr_stop_mult": [3.0, 3.5],
+    "rebalance_phase": [0],
+    "rank_buffer": [0, 1],
+    "vol_target": [0.22, 0.26, 0.30],
+    "atr_stop_mult": [2.8, 3.2],
+    "max_asset_weight": [0.50, 0.60],
     "min_score": [0.48],
     "exit_score": [0.35],
     "half_risk_scale": [0.50],
+    "breadth_threshold": [0.20, 1.0 / 3.0],
+    "breadth_risk_scale": [0.60, 0.75],
+    "correlation_aware": [False],
     "dd_soft": [0.12, 0.14],
-    "dd_hard": [0.19, 0.195, 0.21],
-    "dd_min_scale": [0.30, 0.40],
-    "dd_cooldown_bars": [36, 42],
+    "dd_hard": [0.20],
+    "dd_min_scale": [0.40],
+    "dd_cooldown_bars": [36],
     "dd_recover_scale": [1.0],
     "dd_reentry": [0.06],
 }
@@ -151,14 +158,8 @@ def run_cta_research(
     else:
         best_strategy, best_result = default, default_result
 
-    # 过拟合保护：优化若样本外全面显著弱于默认则回退
-    def_test = default_result.metrics(test_start)
-    opt_test = best_result.metrics(test_start)
-    use_default = (
-        opt_test.sharpe + 0.15 < def_test.sharpe
-        and opt_test.cagr < def_test.cagr
-        and def_test.sharpe > 0
-    )
+    # 最终测试集不得参与接受/回退决策；推荐完全由训练期双折结果决定。
+    use_default = not bool(ranked)
     recommended = default if use_default else best_strategy
     recommended_result = default_result if use_default else best_result
 
@@ -192,12 +193,18 @@ def run_cta_research(
     rec_params = {
         "top_k": recommended.top_k,
         "rebalance_bars": recommended.rebalance_bars,
+        "rebalance_phase": recommended.rebalance_phase,
+        "rank_buffer": recommended.rank_buffer,
         "vol_target": recommended.vol_target,
         "atr_stop_mult": recommended.atr_stop_mult,
         "min_score": recommended.min_score,
         "exit_score": recommended.exit_score,
         "max_gross": recommended.max_gross,
+        "max_asset_weight": recommended.max_asset_weight,
         "half_risk_scale": recommended.half_risk_scale,
+        "breadth_threshold": recommended.breadth_threshold,
+        "breadth_risk_scale": recommended.breadth_risk_scale,
+        "correlation_aware": recommended.correlation_aware,
         "dd_soft": recommended.dd_soft,
         "dd_hard": recommended.dd_hard,
         "dd_reentry": recommended.dd_reentry,
@@ -205,6 +212,43 @@ def run_cta_research(
         "dd_cooldown_bars": recommended.dd_cooldown_bars,
         "dd_recover_scale": recommended.dd_recover_scale,
     }
+
+    phase_sensitivity = []
+    for phase in range(recommended.rebalance_bars):
+        phase_strategy = replace(recommended, rebalance_phase=phase)
+        phase_result = run_cta_backtest(phase_strategy, fee_rate, slippage_rate)
+        phase_sensitivity.append(
+            {
+                "phase": phase,
+                "full": asdict_metrics(phase_result.metrics()),
+                "train": asdict_metrics(phase_result.metrics(0, train_end)),
+                "test": asdict_metrics(phase_result.metrics(test_start)),
+            }
+        )
+
+    cost_stress = []
+    for total_cost in (0.0, 0.0015, 0.0030, 0.0050):
+        stressed = run_cta_backtest(recommended, total_cost, 0.0)
+        cost_stress.append(
+            {
+                "one_way_cost": total_cost,
+                "full": asdict_metrics(stressed.metrics()),
+                "test": asdict_metrics(stressed.metrics(test_start)),
+            }
+        )
+
+    hard_threshold_sensitivity = []
+    for multiplier in (0.90, 1.0, 1.10):
+        strategy = replace(recommended, dd_hard=recommended.dd_hard * multiplier)
+        stressed = run_cta_backtest(strategy, fee_rate, slippage_rate)
+        hard_threshold_sensitivity.append(
+            {
+                "multiplier": multiplier,
+                "dd_hard": strategy.dd_hard,
+                "full": asdict_metrics(stressed.metrics()),
+                "test": asdict_metrics(stressed.metrics(test_start)),
+            }
+        )
 
     payload = {
         "methodology": {
@@ -217,9 +261,12 @@ def run_cta_research(
                 "cross-sectional Top-K rotation with score hysteresis exits",
                 "inverse-vol weights + portfolio vol target",
                 "ATR trailing stop",
+                "persistent ATR high/stop with post-stop cooldown",
+                "absolute UTC rebalance schedule + Top-K rank buffer",
+                "market-breadth risk scaling and per-asset concentration cap",
                 "portfolio drawdown circuit: soft delever + hard flatten cooldown + signal-based re-entry (no permanent lock)",
             ],
-            "selection": "train dual-fold; MDD<=30% hard filter; score favors sharpe/cagr and penalizes MDD>25%; OOS evaluation only",
+            "selection": "train dual-fold only; MDD<=30% hard filter; final test never participates in selection/fallback",
             "risk_budget": "target full-sample MDD<=25% while preserving CAGR (sacrifice at most ~3-5pp vs prior ~22% CAGR baseline)",
             "fee_rate": fee_rate,
             "slippage_rate": slippage_rate,
@@ -245,6 +292,11 @@ def run_cta_research(
             "candidates_qualified": len(ranked),
             "used_default": use_default,
         },
+        "robustness": {
+            "phase_sensitivity": phase_sensitivity,
+            "cost_stress": cost_stress,
+            "hard_threshold_sensitivity": hard_threshold_sensitivity,
+        },
         "recommended_parameters": rec_params,
         "benchmark": {
             "full": asdict_metrics(benchmark.metrics()),
@@ -269,10 +321,14 @@ def run_cta_research(
                 "params": {
                     "top_k": strat.top_k,
                     "rebalance_bars": strat.rebalance_bars,
+                    "rank_buffer": strat.rank_buffer,
                     "vol_target": strat.vol_target,
                     "atr_stop_mult": strat.atr_stop_mult,
+                    "max_asset_weight": strat.max_asset_weight,
                     "min_score": strat.min_score,
                     "exit_score": strat.exit_score,
+                    "breadth_threshold": strat.breadth_threshold,
+                    "breadth_risk_scale": strat.breadth_risk_scale,
                     "dd_soft": strat.dd_soft,
                     "dd_hard": strat.dd_hard,
                     "dd_cooldown_bars": strat.dd_cooldown_bars,
