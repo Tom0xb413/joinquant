@@ -172,7 +172,7 @@ class CoreTop5Tests(unittest.TestCase):
             short_min_return=0.0,
             short_min_win_rate=0.50,
         )
-        index = len(data.dates) - 1
+        index = (len(data.dates) - 1) // strategy.rebalance_days * strategy.rebalance_days
         edge = strategy.short_edge_stats(data, index)
         self.assertTrue(edge.approved)
         weights = strategy.target_weights(data, index, np.zeros(len(data.symbols)))
