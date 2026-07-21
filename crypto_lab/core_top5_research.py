@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, fields, replace
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -16,32 +17,39 @@ from .long_short import LongShortLimits, run_long_short_backtest
 
 LONG_CONFIGS: tuple[dict[str, Any], ...] = tuple(
     {
+        "top_k": top_k,
         "rebalance_days": rebalance_days,
         "vol_target": vol_target,
         "leveraged_max_gross": leveraged_max_gross,
     }
+    for top_k in (1, 2)
     for rebalance_days in (7, 14)
-    for vol_target in (0.35, 0.40, 0.45)
+    for vol_target in (0.45, 0.55)
     for leveraged_max_gross in (1.3, 1.5)
 )
+
+DEFAULT_TRAIN_END = date(2024, 4, 27)
+OOS_MACRO_BULL_END = date(2025, 10, 6)
 
 
 def run_core_top5_research(
     data: MarketData,
     fee_rate: float = 0.001,
     slippage_rate: float = 0.0005,
-    train_fraction: float = 0.60,
+    train_end: date = DEFAULT_TRAIN_END,
 ) -> dict[str, Any]:
     """仅用训练期选择牛市参数和是否启用做空，再做一次样本外评价。
 
-    第一阶段比较有限的调仓频率、波动率目标和杠杆上限，以两个训练折中
-    较弱的牛市超额 CAGR 为主要目标。第二阶段固定多头参数，对比自适应
-    做空与熊市现金；只有做空在两个训练折及完整训练期均改善熊市收益，
-    且未明显恶化全局夏普和回撤时才启用。样本外结果不参与任何选择。
+    第一阶段比较有限的持仓数、调仓频率、波动率目标和杠杆上限，以两个
+    训练折中较弱的因果 risk-on 日历贡献超额 CAGR 为主要目标。第二阶段
+    固定多头参数，对比自适应做空与熊市现金；只有做空在两个训练折及完整
+    训练期均改善熊市收益，且未明显恶化全局夏普和回撤时才启用。固定
+    截止日之后的样本外结果不参与任何选择。
     """
 
-    _validate_research_inputs(data, train_fraction)
-    split_index = max(500, int(len(data.dates) * train_fraction))
+    _validate_research_inputs(data, train_end)
+    train_indices = [index for index, day in enumerate(data.dates) if day <= train_end]
+    split_index = train_indices[-1] + 1
     if len(data.dates) - split_index < 180:
         raise ValueError("样本外区间至少需要 180 天")
     warmup = 220
@@ -50,11 +58,13 @@ def run_core_top5_research(
     limits = LongShortLimits(
         max_gross_exposure=1.5,
         max_net_exposure=1.5,
-        max_short_exposure=0.5,
+        max_short_exposure=0.30,
     )
     benchmark = buy_and_hold(data, fee_rate=fee_rate, slippage_rate=slippage_rate)
 
-    ranked: list[tuple[float, bool, CoreTop5RegimeRotation, BacktestResult, dict[str, Any]]] = []
+    ranked: list[
+        tuple[float, bool, CoreTop5RegimeRotation, BacktestResult, dict[str, Any]]
+    ] = []
     for config in LONG_CONFIGS:
         strategy = CoreTop5RegimeRotation(short_gross=0.0, **config)
         result = run_long_short_backtest(
@@ -65,31 +75,31 @@ def run_core_top5_research(
             limits=limits,
         )
         fold_details = []
-        bull_excesses = []
+        risk_on_excesses = []
         fold_sharpes = []
         fold_drawdowns = []
         for start, end in folds:
-            strategy_bull = _regime_metrics(result, strategy, data, start, end, "bull")
-            benchmark_bull = _regime_metrics(benchmark, strategy, data, start, end, "bull")
+            strategy_risk_on = _regime_metrics(result, strategy, data, start, end, "bull")
+            benchmark_risk_on = _regime_metrics(benchmark, strategy, data, start, end, "bull")
             overall = result.metrics(data.dates[start], data.dates[end])
-            excess = strategy_bull["cagr"] - benchmark_bull["cagr"]
-            bull_excesses.append(excess)
+            excess = strategy_risk_on["cagr"] - benchmark_risk_on["cagr"]
+            risk_on_excesses.append(excess)
             fold_sharpes.append(overall.sharpe)
             fold_drawdowns.append(overall.max_drawdown)
             fold_details.append(
                 {
                     "start": data.dates[start].isoformat(),
                     "end": data.dates[end].isoformat(),
-                    "bull_strategy": strategy_bull,
-                    "bull_benchmark": benchmark_bull,
-                    "bull_excess_cagr": excess,
+                    "risk_on_strategy": strategy_risk_on,
+                    "risk_on_benchmark": benchmark_risk_on,
+                    "risk_on_excess_cagr": excess,
                     "overall": asdict(overall),
                 }
             )
-        qualified = min(bull_excesses) > 0 and min(fold_sharpes) > 0
+        qualified = min(risk_on_excesses) > 0 and min(fold_sharpes) > 0
         score = (
-            min(bull_excesses)
-            + 0.40 * float(np.mean(bull_excesses))
+            min(risk_on_excesses)
+            + 0.40 * float(np.mean(risk_on_excesses))
             + 0.15 * min(fold_sharpes)
             - 0.25 * max(fold_drawdowns)
         )
@@ -133,12 +143,12 @@ def run_core_top5_research(
         recommended_result = cash_result
 
     train_start = data.dates[warmup]
-    train_end = data.dates[split_index - 1]
+    locked_train_end = data.dates[split_index - 1]
     test_start = data.dates[split_index]
     test_end = data.dates[-1]
     recommended_test = recommended_result.metrics_dict(test_start, test_end)
     benchmark_test = benchmark.metrics_dict(test_start, test_end)
-    recommended_bull_test = _regime_metrics(
+    recommended_risk_on_test = _regime_metrics(
         recommended_result,
         recommended_strategy,
         data,
@@ -146,7 +156,7 @@ def run_core_top5_research(
         len(data.dates) - 1,
         "bull",
     )
-    benchmark_bull_test = _regime_metrics(
+    benchmark_risk_on_test = _regime_metrics(
         benchmark,
         recommended_strategy,
         data,
@@ -178,16 +188,31 @@ def run_core_top5_research(
         len(data.dates) - 1,
         "bear",
     )
-    bull_excess = recommended_bull_test["cagr"] - benchmark_bull_test["cagr"]
+    risk_on_excess = (
+        recommended_risk_on_test["cagr"] - benchmark_risk_on_test["cagr"]
+    )
+    macro_bull_end = min(OOS_MACRO_BULL_END, test_end)
+    if macro_bull_end > test_start:
+        recommended_macro_bull = recommended_result.metrics_dict(
+            test_start,
+            macro_bull_end,
+        )
+        benchmark_macro_bull = benchmark.metrics_dict(test_start, macro_bull_end)
+    else:
+        recommended_macro_bull = None
+        benchmark_macro_bull = None
+    exposure = _exposure_stats(recommended_result, split_index, len(data.dates) - 1)
 
     return {
         "methodology": {
-            "goal": "牛市风险开阶段 CAGR 大幅领先 BTC；关键突破可用最高 1.5 倍名义敞口",
+            "goal": "连续宏观牛市 CAGR 领先 BTC；确认突破可使用训练候选允许的杠杆",
             "selection": "仅用训练期双折；先选牛市超额，再独立决定做空或熊市现金",
             "signal_timing": "T-1 收盘生成权重，持有 T 日 close-to-close 收益",
             "core_pool_policy": "固定五币核心池，不在全样本上按事后收益或成交量换池",
             "key_level": "BTC 收盘突破不含当日的过去 55 日最高收盘价",
             "short_fallback": "影子空头滚动净收益/胜率不达标则在线空仓；训练期贡献不稳则全局禁用做空",
+            "risk_on_metric": "非风险开启日按现金零收益保留在完整日历中，再计算贡献 CAGR；另列条件累计收益",
+            "macro_bull_metric": "2024-04-28 至 2025-10-06 为事后历史分段，只用于最终评价、不参与选参",
             "fee_rate_one_way": fee_rate,
             "slippage_rate_one_way": slippage_rate,
             "borrow_rate_daily": limits.borrow_rate_daily,
@@ -201,13 +226,16 @@ def run_core_top5_research(
         "split": {
             "warmup_end": data.dates[warmup - 1].isoformat(),
             "train_start": train_start.isoformat(),
-            "train_end": train_end.isoformat(),
+            "train_end": locked_train_end.isoformat(),
             "test_start": test_start.isoformat(),
             "test_end": test_end.isoformat(),
-            "train_fraction": train_fraction,
+            "split_policy": "固定训练截止日，追加未来数据不会回流训练集",
         },
         "selection": {
             "long_candidates_tested": len(ranked),
+            "unique_return_paths": len(
+                {item[3].daily_returns.tobytes() for item in ranked}
+            ),
             "long_candidates_qualified_both_folds": sum(int(item[1]) for item in ranked),
             "selected_was_qualified": long_qualified,
             "objective": "min(bull excess)+0.4*mean(bull excess)+0.15*min(sharpe)-0.25*max(MDD)",
@@ -220,18 +248,31 @@ def run_core_top5_research(
             "adaptive_short_bear_test": short_bear_test,
         },
         "benchmark": {
-            "train": benchmark.metrics_dict(train_start, train_end),
+            "train": benchmark.metrics_dict(train_start, locked_train_end),
             "test": benchmark_test,
-            "bull_test": benchmark_bull_test,
+            "risk_on_test": benchmark_risk_on_test,
+            "macro_bull_test": benchmark_macro_bull,
         },
         "strategy": {
-            "train": recommended_result.metrics_dict(train_start, train_end),
+            "train": recommended_result.metrics_dict(train_start, locked_train_end),
             "test": recommended_test,
-            "bull_test": recommended_bull_test,
+            "risk_on_test": recommended_risk_on_test,
+            "macro_bull_test": recommended_macro_bull,
             "bear_test": recommended_bear_test,
-            "bull_excess_cagr": bull_excess,
-            "bull_beats_btc": bull_excess > 0,
+            "risk_on_excess_cagr": risk_on_excess,
+            "risk_on_beats_btc": risk_on_excess > 0,
+            "macro_bull_excess_cagr": (
+                recommended_macro_bull["cagr"] - benchmark_macro_bull["cagr"]
+                if recommended_macro_bull is not None and benchmark_macro_bull is not None
+                else None
+            ),
+            "macro_bull_beats_btc": (
+                recommended_macro_bull["cagr"] > benchmark_macro_bull["cagr"]
+                if recommended_macro_bull is not None and benchmark_macro_bull is not None
+                else None
+            ),
             "full_test_beats_btc": recommended_test["cagr"] > benchmark_test["cagr"],
+            "oos_exposure": exposure,
         },
         "equity_curves": {
             "BTC buy-and-hold": [float(value) for value in benchmark.equity],
@@ -254,22 +295,37 @@ def write_core_top5_report(path: Path, results: dict[str, Any]) -> None:
     benchmark = results["benchmark"]
     short = results["short_module"]
     params = results["recommended_parameters"]
+    exposure = strategy["oos_exposure"]
     decision = "启用自适应做空" if short["enabled"] else "做空未通过，熊市退回现金"
+    macro_row = (
+        _comparison_row(
+            "事后宏观牛段",
+            strategy["macro_bull_test"],
+            benchmark["macro_bull_test"],
+        )
+        if strategy["macro_bull_test"] is not None
+        and benchmark["macro_bull_test"] is not None
+        else "| 事后宏观牛段 | N/A | N/A | N/A | N/A | N/A |"
+    )
     lines = [
         "# TOP5 核心池激进牛熊轮动策略",
         "",
         "## 最终规则",
         "",
         f"- 核心池：`{', '.join(results['core_pool'])}`；池外权重恒为零。",
-        "- 牛市：BTC 站上慢趋势、快均线高于慢均线、长动量为正且核心池广度达标。",
-        "- 轮动：长短动量合成排名，持有最强标的并按逆波动率分配。",
-        "- 杠杆：仅 BTC 突破此前 55 日最高收盘价时，将名义总敞口上限放宽至 1.5 倍。",
+        "- 牛市基础仓：BTC 站上慢趋势且长动量为正；宽度不足时持有 BTC，避免错过主升浪。",
+        "- 轮动：快均线和核心池广度确认后，按长短动量排名并逆波动持有最强标的。",
+        (
+            f"- 杠杆：仅 BTC 突破此前 55 日最高收盘价时，名义敞口进入 "
+            f"`{params['breakout_min_gross']:.2f}–{params['leveraged_max_gross']:.2f}` 倍区间。"
+        ),
         "- 熊市：只做空跌破趋势且长动量显著为负的最弱核心资产。",
         "- 双重熔断：滚动影子空头不达收益/胜率门槛则当期空仓；训练贡献不稳则全局禁用。",
         "",
         "## 训练选择",
         "",
         f"- 多头候选 `{results['selection']['long_candidates_tested']}` 组；"
+        f"形成 `{results['selection']['unique_return_paths']}` 条不同收益路径；"
         f"双折均跑赢 BTC 的候选 `{results['selection']['long_candidates_qualified_both_folds']}` 组。",
         f"- 做空结论：**{decision}**。",
         f"- 推荐参数：`{params}`",
@@ -279,13 +335,28 @@ def write_core_top5_report(path: Path, results: dict[str, Any]) -> None:
         "| 区间/状态 | 策略 CAGR | BTC CAGR | 超额 | 策略 Sharpe | 策略最大回撤 |",
         "|---|---:|---:|---:|---:|---:|",
         _comparison_row("完整样本外", strategy["test"], benchmark["test"]),
-        _comparison_row("因果牛市状态", strategy["bull_test"], benchmark["bull_test"]),
+        macro_row,
+        _comparison_row(
+            "因果 risk-on 日历贡献",
+            strategy["risk_on_test"],
+            benchmark["risk_on_test"],
+        ),
         "",
-        f"- 牛市状态是否领先 BTC：`{'是' if strategy['bull_beats_btc'] else '否'}`；"
-        f"超额 CAGR `{strategy['bull_excess_cagr']:+.1%}`。",
+        (
+            f"- 事后宏观牛段是否领先 BTC："
+            f"`{'是' if strategy['macro_bull_beats_btc'] else '否'}`；"
+            f"超额 CAGR `{strategy['macro_bull_excess_cagr']:+.1%}`。"
+            if strategy["macro_bull_beats_btc"] is not None
+            else "- 当前样本外没有完整宏观牛段。"
+        ),
+        f"- 因果 risk-on 的完整日历贡献超额 CAGR `{strategy['risk_on_excess_cagr']:+.1%}`；"
+        f"其中活跃 `{strategy['risk_on_test']['state_observations']}` 天，"
+        f"条件累计收益 `{strategy['risk_on_test']['conditional_total_return']:.1%}`。",
         f"- 熊市状态策略 CAGR `{strategy['bear_test']['cagr']:.1%}`；"
         f"现金方案 `{short['cash_bear_test']['cagr']:.1%}`；"
         f"自适应做空方案 `{short['adaptive_short_bear_test']['cagr']:.1%}`。",
+        f"- 样本外实际最大总敞口 `{exposure['max_gross']:.3f}` 倍；"
+        f"杠杆日 `{exposure['leveraged_days']}`；最大空头 `{exposure['max_short']:.3f}` 倍。",
         "",
         "## 风险边界",
         "",
@@ -326,16 +397,24 @@ def plot_core_top5_research(path: Path, results: dict[str, Any]) -> Path:
     axes[0].grid(True, which="both", alpha=0.25)
     axes[0].legend(fontsize=8)
 
-    labels = ["Full OOS", "Bull state", "Bear state"]
+    labels = ["Full OOS", "Macro bull", "Risk-on contribution"]
     strategy_cagr = [
         strategy["test"]["cagr"] * 100,
-        strategy["bull_test"]["cagr"] * 100,
-        strategy["bear_test"]["cagr"] * 100,
+        (
+            strategy["macro_bull_test"]["cagr"] * 100
+            if strategy["macro_bull_test"] is not None
+            else 0.0
+        ),
+        strategy["risk_on_test"]["cagr"] * 100,
     ]
     benchmark_cagr = [
         benchmark["test"]["cagr"] * 100,
-        benchmark["bull_test"]["cagr"] * 100,
-        0.0,
+        (
+            benchmark["macro_bull_test"]["cagr"] * 100
+            if benchmark["macro_bull_test"] is not None
+            else 0.0
+        ),
+        benchmark["risk_on_test"]["cagr"] * 100,
     ]
     x = np.arange(len(labels))
     width = 0.36
@@ -442,27 +521,54 @@ def _regime_metrics(
     end: int,
     regime: str,
 ) -> dict[str, Any]:
-    """按前一日可知的市场状态抽取收益并计算状态内风险收益指标。
+    """按前一日可知的市场状态计算完整日历贡献和条件收益。
 
     第 ``i`` 日收益对应第 ``i-1`` 日信号，因此状态标签也取前一日，保持
-    与回测持仓完全一致。非连续状态日按日收益拼接，仅用于条件表现比较，
-    不应解释为可直接投资的连续净值路径。
+    与回测持仓完全一致。非目标状态日以现金零收益保留在原日历中，CAGR、
+    波动率和回撤因此仍按完整连续区间计算；另附活跃日条件累计及年化值，
+    但明确不把后者称为连续市场阶段 CAGR。
     """
 
-    indices = [
-        index
-        for index in range(max(1, start), min(end, len(data.dates) - 1) + 1)
-        if regime_strategy.market_regime(data, index - 1) == regime
-    ]
-    returns = result.daily_returns[np.asarray(indices, dtype=int)] if indices else np.array([])
-    return _return_metrics(returns)
+    calendar_indices = np.arange(
+        max(1, start),
+        min(end, len(data.dates) - 1) + 1,
+        dtype=int,
+    )
+    state_mask = np.asarray(
+        [
+            regime_strategy.market_regime(data, int(index) - 1) == regime
+            for index in calendar_indices
+        ],
+        dtype=bool,
+    )
+    conditional_returns = result.daily_returns[calendar_indices[state_mask]]
+    calendar_returns = np.zeros(len(calendar_indices), dtype=float)
+    calendar_returns[state_mask] = conditional_returns
+    metrics = _return_metrics(calendar_returns)
+    conditional_total_return = (
+        float(np.prod(1.0 + conditional_returns) - 1.0)
+        if len(conditional_returns)
+        else 0.0
+    )
+    conditional_years = len(conditional_returns) / 365.0
+    conditional_annualized_return = (
+        float((1.0 + conditional_total_return) ** (1.0 / conditional_years) - 1.0)
+        if conditional_years > 0 and conditional_total_return > -1.0
+        else 0.0
+    )
+    return {
+        **metrics,
+        "state_observations": int(state_mask.sum()),
+        "conditional_total_return": conditional_total_return,
+        "conditional_annualized_return": conditional_annualized_return,
+    }
 
 
 def _return_metrics(returns: np.ndarray) -> dict[str, Any]:
-    """从可为非连续状态日的收益数组计算统一年化指标。
+    """从连续日历收益数组计算统一年化指标。
 
-    空状态返回零值而不是抛错，使训练折在没有对应市场状态时可被明确判为
-    没有证据；两天以上才计算样本波动率，避免单观测自由度导致 NaN。
+    数组中的现金日应显式写为零，以确保 CAGR 使用真实日历长度。空数组
+    返回零值；两天以上才计算样本波动率，避免单观测自由度导致 NaN。
     """
 
     observations = len(returns)
@@ -500,6 +606,26 @@ def _return_metrics(returns: np.ndarray) -> dict[str, Any]:
     }
 
 
+def _exposure_stats(result: BacktestResult, start: int, end: int) -> dict[str, Any]:
+    """汇总指定区间的真实总敞口、空头和杠杆使用情况。
+
+    统计直接读取经过引擎裁剪后的每日权重，而不是策略配置上限，因此可
+    揭示理论杠杆帽是否真正被触发，并防止报告把“允许”误写成“已使用”。
+    """
+
+    weights = np.asarray(result.weights[start : end + 1], dtype=float)
+    gross = np.sum(np.abs(weights), axis=1)
+    short = np.sum(np.maximum(-weights, 0.0), axis=1)
+    active = gross > 1e-8
+    return {
+        "max_gross": float(np.max(gross)) if len(gross) else 0.0,
+        "leveraged_days": int(np.sum(gross > 1.0 + 1e-8)),
+        "active_days": int(np.sum(active)),
+        "average_active_gross": float(np.mean(gross[active])) if active.any() else 0.0,
+        "max_short": float(np.max(short)) if len(short) else 0.0,
+    }
+
+
 def _comparison_row(label: str, strategy: dict[str, Any], benchmark: dict[str, Any]) -> str:
     """格式化策略与 BTC 的单行 Markdown 对比，统一百分比精度。
 
@@ -528,11 +654,11 @@ def _strategy_params(strategy: CoreTop5RegimeRotation) -> dict[str, Any]:
     }
 
 
-def _validate_research_inputs(data: MarketData, train_fraction: float) -> None:
-    """验证研究所需核心池、样本长度和时间切分比例。
+def _validate_research_inputs(data: MarketData, train_end: date) -> None:
+    """验证研究所需核心池、样本长度和固定训练截止日。
 
     研究至少需要 900 天，以覆盖 200 日慢趋势预热、两个训练折和独立样本
-    外区间；提前拒绝短样本可避免把大量空仓预热期误当成稳健表现。
+    外区间；截止日必须落在样本内部，确保参数选择区和最终评价区不重叠。
     """
 
     missing = [symbol for symbol in CORE_TOP5_SYMBOLS if symbol not in data.symbols]
@@ -540,5 +666,7 @@ def _validate_research_inputs(data: MarketData, train_fraction: float) -> None:
         raise ValueError(f"研究数据缺少核心池标的：{', '.join(missing)}")
     if len(data.dates) < 900:
         raise ValueError("TOP5 研究至少需要 900 天行情")
-    if not 0.50 <= train_fraction <= 0.80:
-        raise ValueError("train_fraction 必须位于 [0.50, 0.80]")
+    train_days = sum(day <= train_end for day in data.dates)
+    test_days = len(data.dates) - train_days
+    if train_days < 500 or test_days < 180:
+        raise ValueError("固定训练截止日必须保留至少 500 天训练和 180 天样本外数据")

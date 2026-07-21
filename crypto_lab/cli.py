@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import shutil
 from datetime import date, datetime, timezone
@@ -10,6 +11,7 @@ from pathlib import Path
 
 from .core_top5 import CORE_TOP5_SYMBOLS
 from .core_top5_research import (
+    DEFAULT_TRAIN_END,
     plot_core_top5_research,
     run_core_top5_research,
     write_core_top5_report,
@@ -110,7 +112,12 @@ def build_parser() -> argparse.ArgumentParser:
     core_top5.add_argument("--symbols", nargs="+", default=list(CORE_TOP5_SYMBOLS))
     core_top5.add_argument("--fee-rate", type=float, default=0.001)
     core_top5.add_argument("--slippage-rate", type=float, default=0.0005)
-    core_top5.add_argument("--train-fraction", type=float, default=0.60)
+    core_top5.add_argument(
+        "--train-end",
+        type=date.fromisoformat,
+        default=DEFAULT_TRAIN_END,
+        help="固定训练截止日；后续新增行情不会回流训练集",
+    )
     core_top5.add_argument(
         "--artifact-dir",
         type=Path,
@@ -326,8 +333,11 @@ def _core_top5(args: argparse.Namespace) -> int:
     的情况下审阅牛市超额及做空降级结论。
     """
 
-    if len(args.symbols) != 5 or len(set(args.symbols)) != 5:
-        raise ValueError("core-top5 命令必须恰好传入五个互不重复的标的")
+    if set(args.symbols) != set(CORE_TOP5_SYMBOLS) or len(args.symbols) != 5:
+        raise ValueError(
+            "core-top5 命令当前只接受固定核心池："
+            + ", ".join(CORE_TOP5_SYMBOLS)
+        )
     series = {
         symbol: load_candles(args.data_dir / f"{symbol}.csv")
         for symbol in args.symbols
@@ -337,8 +347,18 @@ def _core_top5(args: argparse.Namespace) -> int:
         data,
         fee_rate=args.fee_rate,
         slippage_rate=args.slippage_rate,
-        train_fraction=args.train_fraction,
+        train_end=args.train_end,
     )
+    results["data_files"] = [
+        {
+            "symbol": symbol,
+            "path": str(args.data_dir / f"{symbol}.csv"),
+            "sha256": hashlib.sha256(
+                (args.data_dir / f"{symbol}.csv").read_bytes()
+            ).hexdigest(),
+        }
+        for symbol in args.symbols
+    ]
     json_path = args.output_dir / "core_top5_results.json"
     report_path = args.output_dir / "core_top5_report.md"
     chart_path = args.output_dir / "core_top5_validation.png"

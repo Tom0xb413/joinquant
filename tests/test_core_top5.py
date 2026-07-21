@@ -7,7 +7,9 @@ from datetime import date, timedelta
 
 import numpy as np
 
+from crypto_lab.backtest import BacktestResult
 from crypto_lab.core_top5 import CORE_TOP5_SYMBOLS, CoreTop5RegimeRotation
+from crypto_lab.core_top5_research import _regime_metrics
 from crypto_lab.data import MarketData
 
 
@@ -144,12 +146,12 @@ class CoreTop5Tests(unittest.TestCase):
         self.assertAlmostEqual(float(np.sum(np.abs(weights))), 1.0, places=8)
 
     def test_bear_market_falls_back_to_cash_without_short_evidence(self):
-        """影子空头有效天数不足时，确认熊市也必须返回全现金。"""
+        """影子空头独立交易数不足时，确认熊市也必须返回全现金。"""
 
         data = sample_bear_market()
         strategy = compact_strategy(
             short_momentum_threshold=-0.01,
-            short_min_observations=100,
+            short_min_trades=100,
         )
         weights = strategy.target_weights(
             data,
@@ -164,8 +166,9 @@ class CoreTop5Tests(unittest.TestCase):
         data = sample_bear_market()
         strategy = compact_strategy(
             short_gross=0.30,
+            rebalance_days=7,
             short_momentum_threshold=-0.01,
-            short_min_observations=10,
+            short_min_trades=2,
             short_min_return=0.0,
             short_min_win_rate=0.50,
         )
@@ -176,6 +179,26 @@ class CoreTop5Tests(unittest.TestCase):
         self.assertAlmostEqual(float(np.sum(np.maximum(-weights, 0.0))), 0.30)
         self.assertAlmostEqual(float(weights[-1]), 0.0)
         self.assertLess(float(weights.sum()), 0.0)
+
+    def test_future_prices_cannot_change_short_edge_approval(self):
+        """修改评价日之后价格不得改变影子空头统计或审批结论。"""
+
+        data = sample_bear_market()
+        strategy = compact_strategy(
+            rebalance_days=7,
+            short_momentum_threshold=-0.01,
+            short_min_trades=2,
+            short_min_return=0.0,
+        )
+        index = 420
+        before = strategy.short_edge_stats(data, index)
+        changed = sample_bear_market()
+        changed.close[index + 1 :] *= 0.05
+        changed.high[index + 1 :] *= 0.05
+        changed.low[index + 1 :] *= 0.05
+        changed.open[index + 1 :] *= 0.05
+        after = strategy.short_edge_stats(changed, index)
+        self.assertEqual(before, after)
 
     def test_future_prices_cannot_change_current_signal(self):
         """修改信号日之后的所有价格不得改变当前目标权重，防止未来泄漏。"""
@@ -211,6 +234,46 @@ class CoreTop5Tests(unittest.TestCase):
                 len(data.dates) - 1,
                 np.zeros(len(data.symbols)),
             )
+
+    def test_regime_cagr_keeps_non_state_calendar_days(self):
+        """状态贡献 CAGR 必须按完整日历年化，不能压缩掉非状态现金日。"""
+
+        class AlternatingRegime:
+            """提供确定性交替状态，隔离研究指标的日历口径。
+
+            @author Cursor
+            @since 0.2.0
+            """
+
+            def market_regime(self, data, signal_index):
+                """偶数信号日返回 bull，奇数日返回 neutral。"""
+
+                return "bull" if signal_index % 2 == 0 else "neutral"
+
+        data = sample_bull_market()
+        daily_returns = np.full(len(data.dates), 0.01)
+        result = BacktestResult(
+            strategy="calendar_metric",
+            dates=data.dates,
+            daily_returns=daily_returns,
+            equity=np.cumprod(1.0 + daily_returns),
+            weights=np.zeros_like(data.close),
+            turnover=np.zeros(len(data.dates)),
+            costs=np.zeros(len(data.dates)),
+        )
+        metrics = _regime_metrics(
+            result,
+            AlternatingRegime(),
+            data,
+            400,
+            499,
+            "bull",
+        )
+        expected_total = 1.01**50 - 1.0
+        expected_cagr = (1.0 + expected_total) ** (365.0 / 100.0) - 1.0
+        self.assertEqual(metrics["observations"], 100)
+        self.assertEqual(metrics["state_observations"], 50)
+        self.assertAlmostEqual(metrics["cagr"], expected_cagr)
 
 
 if __name__ == "__main__":
