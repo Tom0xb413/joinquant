@@ -205,11 +205,14 @@ class CoreTop5Tests(unittest.TestCase):
         """影子窗口净收益必须逐日匹配相同规则在真实多空引擎中的结果。"""
 
         data = sample_bear_market()
+        fee_rate = 0.002
+        slippage_rate = 0.001
         strategy = compact_strategy(
             rebalance_days=7,
             short_momentum_threshold=-0.01,
             short_min_episodes=1,
             short_min_return=-1.0,
+            shadow_cost_rate=fee_rate + slippage_rate,
         )
 
         class RawShortStrategy:
@@ -238,8 +241,8 @@ class CoreTop5Tests(unittest.TestCase):
         result = run_long_short_backtest(
             data,
             RawShortStrategy(),
-            fee_rate=0.001,
-            slippage_rate=0.0005,
+            fee_rate=fee_rate,
+            slippage_rate=slippage_rate,
             limits=LongShortLimits(
                 max_gross_exposure=1.5,
                 max_net_exposure=1.5,

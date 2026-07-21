@@ -67,7 +67,12 @@ def run_core_top5_research(
         tuple[float, bool, CoreTop5RegimeRotation, BacktestResult, dict[str, Any]]
     ] = []
     for config in LONG_CONFIGS:
-        strategy = CoreTop5RegimeRotation(short_gross=0.0, **config)
+        strategy = CoreTop5RegimeRotation(
+            short_gross=0.0,
+            shadow_cost_rate=fee_rate + slippage_rate,
+            shadow_borrow_rate_daily=limits.borrow_rate_daily,
+            **config,
+        )
         result = run_long_short_backtest(
             data,
             strategy,
