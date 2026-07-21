@@ -1,0 +1,99 @@
+{
+  "source": "https://www.okx.com/api/v5/market/history-candles",
+  "universe": [
+    "BTC-USDT",
+    "ETH-USDT",
+    "SOL-USDT",
+    "XRP-USDT",
+    "ADA-USDT",
+    "DOGE-USDT",
+    "LTC-USDT",
+    "BCH-USDT",
+    "LINK-USDT",
+    "DOT-USDT",
+    "AVAX-USDT",
+    "UNI-USDT",
+    "ATOM-USDT",
+    "NEAR-USDT",
+    "AAVE-USDT"
+  ],
+  "start": "2021-01-01",
+  "end": "2026-07-15",
+  "symbols": {
+    "BTC-USDT": {
+      "1D": "data/okx_cta/BTC-USDT_1D.csv",
+      "4H": "data/okx_cta/BTC-USDT_4H.csv",
+      "12H": "data/okx_cta/BTC-USDT_12H.csv"
+    },
+    "ETH-USDT": {
+      "1D": "data/okx_cta/ETH-USDT_1D.csv",
+      "4H": "data/okx_cta/ETH-USDT_4H.csv",
+      "12H": "data/okx_cta/ETH-USDT_12H.csv"
+    },
+    "SOL-USDT": {
+      "1D": "data/okx_cta/SOL-USDT_1D.csv",
+      "4H": "data/okx_cta/SOL-USDT_4H.csv",
+      "12H": "data/okx_cta/SOL-USDT_12H.csv"
+    },
+    "XRP-USDT": {
+      "1D": "data/okx_cta/XRP-USDT_1D.csv",
+      "4H": "data/okx_cta/XRP-USDT_4H.csv",
+      "12H": "data/okx_cta/XRP-USDT_12H.csv"
+    },
+    "ADA-USDT": {
+      "1D": "data/okx_cta/ADA-USDT_1D.csv",
+      "4H": "data/okx_cta/ADA-USDT_4H.csv",
+      "12H": "data/okx_cta/ADA-USDT_12H.csv"
+    },
+    "DOGE-USDT": {
+      "1D": "data/okx_cta/DOGE-USDT_1D.csv",
+      "4H": "data/okx_cta/DOGE-USDT_4H.csv",
+      "12H": "data/okx_cta/DOGE-USDT_12H.csv"
+    },
+    "LTC-USDT": {
+      "1D": "data/okx_cta/LTC-USDT_1D.csv",
+      "4H": "data/okx_cta/LTC-USDT_4H.csv",
+      "12H": "data/okx_cta/LTC-USDT_12H.csv"
+    },
+    "BCH-USDT": {
+      "1D": "data/okx_cta/BCH-USDT_1D.csv",
+      "4H": "data/okx_cta/BCH-USDT_4H.csv",
+      "12H": "data/okx_cta/BCH-USDT_12H.csv"
+    },
+    "LINK-USDT": {
+      "1D": "data/okx_cta/LINK-USDT_1D.csv",
+      "4H": "data/okx_cta/LINK-USDT_4H.csv",
+      "12H": "data/okx_cta/LINK-USDT_12H.csv"
+    },
+    "DOT-USDT": {
+      "1D": "data/okx_cta/DOT-USDT_1D.csv",
+      "4H": "data/okx_cta/DOT-USDT_4H.csv",
+      "12H": "data/okx_cta/DOT-USDT_12H.csv"
+    },
+    "AVAX-USDT": {
+      "1D": "data/okx_cta/AVAX-USDT_1D.csv",
+      "4H": "data/okx_cta/AVAX-USDT_4H.csv",
+      "12H": "data/okx_cta/AVAX-USDT_12H.csv"
+    },
+    "UNI-USDT": {
+      "1D": "data/okx_cta/UNI-USDT_1D.csv",
+      "4H": "data/okx_cta/UNI-USDT_4H.csv",
+      "12H": "data/okx_cta/UNI-USDT_12H.csv"
+    },
+    "ATOM-USDT": {
+      "1D": "data/okx_cta/ATOM-USDT_1D.csv",
+      "4H": "data/okx_cta/ATOM-USDT_4H.csv",
+      "12H": "data/okx_cta/ATOM-USDT_12H.csv"
+    },
+    "NEAR-USDT": {
+      "1D": "data/okx_cta/NEAR-USDT_1D.csv",
+      "4H": "data/okx_cta/NEAR-USDT_4H.csv",
+      "12H": "data/okx_cta/NEAR-USDT_12H.csv"
+    },
+    "AAVE-USDT": {
+      "1D": "data/okx_cta/AAVE-USDT_1D.csv",
+      "4H": "data/okx_cta/AAVE-USDT_4H.csv",
+      "12H": "data/okx_cta/AAVE-USDT_12H.csv"
+    }
+  }
+}

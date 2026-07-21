@@ -1,0 +1,47 @@
+{
+  "source": "https://www.okx.com/api/v5/market/history-candles",
+  "start": "2021-01-01",
+  "end": "2026-07-15",
+  "symbols": {
+    "BTC-USDT": {
+      "1D": {
+        "path": "data/okx_bars/BTC-USDT_1D.csv",
+        "bars": 2022,
+        "start": "2021-01-01T00:00:00+00:00",
+        "end": "2026-07-15T00:00:00+00:00"
+      },
+      "4H": {
+        "path": "data/okx_bars/BTC-USDT_4H.csv",
+        "bars": 12132,
+        "start": "2021-01-01T00:00:00+00:00",
+        "end": "2026-07-15T20:00:00+00:00"
+      },
+      "8H": {
+        "path": "data/okx_bars/BTC-USDT_8H.csv",
+        "bars": 6066,
+        "start": "2021-01-01T00:00:00+00:00",
+        "end": "2026-07-15T16:00:00+00:00"
+      }
+    },
+    "ETH-USDT": {
+      "1D": {
+        "path": "data/okx_bars/ETH-USDT_1D.csv",
+        "bars": 2022,
+        "start": "2021-01-01T00:00:00+00:00",
+        "end": "2026-07-15T00:00:00+00:00"
+      },
+      "4H": {
+        "path": "data/okx_bars/ETH-USDT_4H.csv",
+        "bars": 12132,
+        "start": "2021-01-01T00:00:00+00:00",
+        "end": "2026-07-15T20:00:00+00:00"
+      },
+      "8H": {
+        "path": "data/okx_bars/ETH-USDT_8H.csv",
+        "bars": 6066,
+        "start": "2021-01-01T00:00:00+00:00",
+        "end": "2026-07-15T16:00:00+00:00"
+      }
+    }
+  }
+}

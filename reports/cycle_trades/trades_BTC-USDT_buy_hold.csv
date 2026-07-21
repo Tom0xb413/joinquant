@@ -1,0 +1,2 @@
+date,strategy,symbol,side,weight_from,weight_to,weight_delta,price,turnover_contribution,equity_before
+2021-01-02,BTC-USDT_buy_hold,BTC-USDT,buy,0.0,1.0,1.0,32186.5,1.0,1.0

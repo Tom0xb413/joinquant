@@ -9,6 +9,7 @@ description = "将聚宽 A 股策略迁移到 Crypto 的可复现研究与回测
 requires-python = ">=3.10"
 dependencies = [
     "numpy>=2.4.4,<3",
+    "matplotlib>=3.8,<4",
 ]
 
 [project.scripts]
