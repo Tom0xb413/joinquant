@@ -167,18 +167,17 @@ python3 -m crypto_lab.cli trade-book --output reports/trade_book.json
 - `core-top5` 使用多空引擎，名义总敞口硬上限 1.5 倍、空头上限 0.3 倍；
   回测未模拟强平、保证金阶梯和逐币种实时资金费率。
 
-## Pull / 分支合并状态（截至整理时）
+## Pull / 分支合并状态
 
-| PR | 分支 | 状态 | 内容 |
+| PR | 原分支 | 状态 | 内容 |
 |---|---|---|---|
 | #1 | `cursor/crypto-cross-market-backtest-7e58` | 已合并 | 跨市场回测与 BTC 门控增强 |
 | #2 | `cursor/crypto-cross-market-backtest-7e58` | 已合并 | 2021–2026 全周期详细报告 |
 | #3 | `cursor/core-top5-regime-f4f4` | 已合并 | TOP5 核心池激进牛熊轮动 |
-| #4 | `cursor/live-paper-console-f4f4` | 由本分支承接合并 | 模拟/实盘控制台与 Web 操作台 |
+| #4 | `cursor/live-paper-console-f4f4` | 已关闭 | 与 #3 squash 后冲突；由 #5 承接 |
+| #5 | `cursor/docs-structure-merge-97c6` | 已合并 | 干净合入 live/web 控制台 + README 结构文档 |
 
-说明：PR #4 曾因 #3 的 squash 合入与 `main` 冲突（重复的 `core_top5*`）。本变更在 `main`
-上干净接入 `crypto_lab/live`、`crypto_lab/web`、`live-console` / `trade-book` CLI，并更新本文档；
-合并后应关闭 #4，并删除已无 ahead 提交的远程特性分支。
+上述特性分支已从远程删除；当前默认分支为 `main`。
 
 ## 重要限制
 
