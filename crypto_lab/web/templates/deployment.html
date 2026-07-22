@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}{{ snapshot.deployment_id }} · {{ brand }}{% endblock %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">DEPLOYMENT</p>
+    <h1>{{ snapshot.deployment_id }}</h1>
+  </div>
+  <div class="topbar-actions">
+    <a class="ghost" href="{{ url_for('dashboard') }}">返回总览</a>
+    <form method="post" action="{{ url_for('logout') }}">
+      <button class="ghost" type="submit">退出</button>
+    </form>
+  </div>
+</header>
+
+<nav class="nav">
+  <a href="{{ url_for('dashboard') }}">总览</a>
+  <a href="{{ url_for('trades', deployment_id=snapshot.deployment_id) }}">本部署买卖点</a>
+</nav>
+
+<section class="hero-strip">
+  <div>
+    <p class="eyebrow">MODE</p>
+    <strong>{{ snapshot.mode }}</strong>
+  </div>
+  <div>
+    <p class="eyebrow">EQUITY</p>
+    <strong>{{ "%.2f"|format(snapshot.equity) }}</strong>
+  </div>
+  <div>
+    <p class="eyebrow">RETURN</p>
+    <strong>{{ "%.2%"|format(snapshot.total_return) }}</strong>
+  </div>
+  <div>
+    <p class="eyebrow">SHARPE / MDD</p>
+    <strong>{{ "%.2f"|format(snapshot.sharpe) }} / {{ "%.2%"|format(snapshot.max_drawdown) }}</strong>
+  </div>
+</section>
+
+<section class="split">
+  <article class="panel">
+    <h2>当前持仓</h2>
+    {% if snapshot.positions %}
+    <table>
+      <thead>
+        <tr>
+          <th>标的</th>
+          <th>数量</th>
+          <th>成本</th>
+          <th>现价</th>
+          <th>权重</th>
+          <th>浮动盈亏</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for pos in snapshot.positions %}
+        <tr>
+          <td>{{ pos.symbol }}</td>
+          <td>{{ "%.6f"|format(pos.quantity) }}</td>
+          <td>{{ "%.4f"|format(pos.avg_price) }}</td>
+          <td>{{ "%.4f"|format(pos.market_price) }}</td>
+          <td>{{ "%.2%"|format(pos.weight) }}</td>
+          <td class="{{ 'up' if pos.unrealized_pnl >= 0 else 'down' }}">{{ "%.2f"|format(pos.unrealized_pnl) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">当前无持仓（现金或纯买卖点部署）。</p>
+    {% endif %}
+    <p class="foot">现金 {{ "%.2f"|format(snapshot.cash) }} · 已实现 {{ "%.2f"|format(snapshot.realized_pnl) }} · 信号日 {{ snapshot.last_signal_date or "-" }}</p>
+  </article>
+
+  <article class="panel">
+    <h2>目标权重</h2>
+    {% if snapshot.target_weights %}
+    <ul class="weight-list">
+      {% for symbol, weight in snapshot.target_weights.items() %}
+      <li><span>{{ symbol }}</span><strong>{{ "%.2%"|format(weight) }}</strong></li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">目标权重为空。</p>
+    {% endif %}
+    <p class="foot">{{ snapshot.status }} · {{ snapshot.message }}</p>
+  </article>
+</section>
+
+<section class="panel">
+  <h2>近期成交 / 意向</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>时间</th>
+        <th>方向</th>
+        <th>标的</th>
+        <th>数量</th>
+        <th>价格</th>
+        <th>状态</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for fill in fills %}
+      <tr>
+        <td>{{ fill.timestamp }}</td>
+        <td>{{ fill.side }}</td>
+        <td>{{ fill.symbol }}</td>
+        <td>{{ "%.6f"|format(fill.quantity) }}</td>
+        <td>{{ "%.4f"|format(fill.price) }}</td>
+        <td>{{ fill.status }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="muted">暂无成交记录</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="panel">
+  <h2>买卖点（{{ summary.count }}）</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>日期</th>
+        <th>方向</th>
+        <th>标的</th>
+        <th>价格</th>
+        <th>权重变化</th>
+        <th>备注</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for point in points[:50] %}
+      <tr>
+        <td>{{ point.date }}</td>
+        <td>{{ point.side }}</td>
+        <td>{{ point.symbol }}</td>
+        <td>{{ "%.4f"|format(point.price) }}</td>
+        <td>{{ "%.2f"|format(point.weight_from) }} → {{ "%.2f"|format(point.weight_to) }}</td>
+        <td>{{ point.note }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="muted">暂无买卖点</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

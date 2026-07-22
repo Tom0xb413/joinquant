@@ -1,6 +1,42 @@
 # 聚宽策略跨市场 Crypto 研究
 
-本仓库保留 12 份聚宽 A 股原始策略，并提供一个仅依赖 NumPy 的研究框架，将其中可跨市场验证的结构迁移到 Crypto。框架直接下载 OKX 公开现货日 K，使用严格的 T-1 信号、真实交易成本、时间序列切分和样本外评价。
+本仓库保留 12 份聚宽 A 股原始策略，并提供一个可复现的 Python 研究框架（`crypto_lab`），将其中可跨市场验证的结构迁移到 Crypto。框架使用 OKX 公开现货 K 线、严格的 T-1 信号、真实交易成本、时间序列切分与样本外评价。
+
+## 仓库结构
+
+```text
+joinquant/
+├── 01–12-*.py              # 聚宽 A 股参考策略（仅 joinquant.com 可运行，勿本地执行）
+├── README.txt              # 原始 Top12 策略包说明
+├── AGENTS.md               # Cursor Cloud 开发环境约定
+├── pyproject.toml          # 包元数据与依赖（numpy / matplotlib / flask）
+├── configs/
+│   └── live_console.example.json   # 模拟/实盘控制台示例配置
+├── crypto_lab/             # 可运行研究与部署代码
+│   ├── cli.py              # 统一 CLI 入口
+│   ├── data.py / indicators.py / backtest.py / long_short.py
+│   ├── strategies.py / research.py                 # 首轮跨市场迁移
+│   ├── optimized_strategies.py / optimize_research.py
+│   ├── crypto_alpha.py / crypto_alpha_research.py
+│   ├── core_top5.py / core_top5_research.py
+│   ├── cycle_report.py
+│   ├── ema_*.py            # BTC/ETH EMA 多周期研究
+│   ├── cta_*.py            # TOP15 多周期动量 CTA
+│   ├── live/               # paper / live / backtest 运行时
+│   └── web/                # 登录保护的 Web 操作台
+├── data/
+│   ├── okx/                # 日线快照（首轮/优化/alpha/TOP5）
+│   ├── okx_bars/           # EMA 多周期 K 线
+│   └── okx_cta/            # CTA 多周期 K 线
+├── reports/                # 研究产出（markdown / json / png）
+└── tests/                  # unittest 套件
+```
+
+`NN-*.py` 风格的顶层 `01–12-*.py` 仅为聚宽平台参考源码；本地可执行入口一律走：
+
+```bash
+python3 -m crypto_lab.cli <subcommand>
+```
 
 ## 策略原型与借鉴来源
 
@@ -15,32 +51,40 @@
 
 不能直接迁移的内容包括 A 股财报、审计意见、分红、ST、涨跌停、T+1 和指数绝对点位阈值。相关策略只保留调仓与风控结构，不把成交量代理伪装成真正的链上基本面。
 
-## 快速运行
+## 安装与快速运行
 
-环境要求：Python 3.10+、NumPy 2.4.4+。
+环境要求：Python 3.10+、NumPy 2.4.4+、matplotlib 3.8+、Flask 3.x（Web 控制台）。
 
 ```bash
+pip install -e .
 python3 -m crypto_lab.cli download --start 2021-01-01 --end 2026-07-15
 python3 -m crypto_lab.cli research
 python3 -m crypto_lab.cli optimize
 python3 -m crypto_lab.cli crypto-alpha
 python3 -m crypto_lab.cli core-top5
+python3 -m crypto_lab.cli cycle-report
+python3 -m crypto_lab.cli ema-research
+python3 -m crypto_lab.cli cta-research
+python3 -m crypto_lab.cli live-console
 python3 -m unittest discover -s tests -v
 ```
 
-输出：
+离线命令（`research` / `optimize` / `crypto-alpha` / `core-top5` / `cycle-report`，以及不加 `--refresh` 的 `ema-research` / `cta-research`）直接读取 `data/` 下已提交的 CSV 快照，无需外网。只有 `download` 与带 `--refresh` 的行情刷新会访问 OKX 公开 API。
 
-- `reports/cross_market_report.md`：首轮迁移原型样本外结论；
-- `reports/optimized_strategies_report.md`：低换手优化策略设计与验证；
-- `reports/crypto_alpha_report.md`：BTC门控/轮动/对冲增强，冲击年化15%+夏普1+；
-- `reports/core_top5_report.md`：TOP5 核心池激进轮动、关键位杠杆及做空降级验证；
-- `reports/core_top5_validation.png`：TOP5 方案净值与锁定参数后的状态分段对比；
-- `reports/crypto_alpha_results.json`：增强策略参数与目标达成明细；
-- `reports/optimized_backtest_results.json`：优化策略全部参数及训练/样本外指标；
-- `reports/backtest_results.json`：首轮策略参数及训练/样本外指标；
-- `reports/data_manifest.json`：数据来源、日期范围、行数和 SHA-256。
+## CLI 子命令一览
 
-仓库包含本次报告使用的原始 CSV 快照；上述固定起止日期命令可重新下载并核对清单中的 SHA-256。
+| 命令 | 作用 | 主要产出 |
+|---|---|---|
+| `download` | 下载 OKX UTC 日线 | `data/okx/*.csv`、`data_manifest.json` |
+| `research` | 首轮跨市场迁移原型 | `reports/cross_market_report.md` |
+| `optimize` | 低换手优化策略 | `reports/optimized_strategies_report.md` |
+| `crypto-alpha` | BTC 门控/轮动/对冲增强 | `reports/crypto_alpha_report.md` |
+| `core-top5` | TOP5 激进牛熊轮动 | `reports/core_top5_report.md` |
+| `cycle-report` | 2021–2026 全周期与 beta 分段 | `reports/cycle_full_report.md` |
+| `ema-research` | BTC/ETH EMA50/100 多周期 | `reports/ema_report.md` |
+| `cta-research` | TOP15 多周期动量 CTA | `reports/cta_report.md`、对抗审查报告 |
+| `live-console` | 模拟/实盘干跑 + Web 操作台 | `runtime/live/console.db` |
+| `trade-book` | 导出历史买卖点 JSON | `reports/trade_book.json` |
 
 ## 优化策略设计（第二轮）
 
@@ -66,20 +110,75 @@ python3 -m unittest discover -s tests -v
 熊市模块只做空跌破趋势且动量显著为负的最弱核心标的。每次启用前会用已发生
 行情按真实调仓周期和 0.3 倍敞口回放最近 90 日影子空头，扣除换手和借券成本；
 净收益、连续持仓 episode 数或胜率不达标则当期空仓。研究阶段还会比较两个训练
-折中的做空与现金表现，贡献不稳定时把探索方案
-方案全局降级为熊市现金。训练截止日固定为 2024-04-27，后续新增行情不会回流
-训练集；每个输入 CSV 的 SHA-256 会随结果保存。当前截止 2026-07-15 的区间
-已在开发中被查看，只能称开发后验证集；其后的新增行情才可作为 forward OOS。
+折中的做空与现金表现，贡献不稳定时把探索方案全局降级为熊市现金。训练截止日固定为
+2024-04-27，后续新增行情不会回流训练集；每个输入 CSV 的 SHA-256 会随结果保存。
+当前截止 2026-07-15 的区间已在开发中被查看，只能称开发后验证集；其后的新增行情才可作为
+forward OOS。
+
+## 实盘 / 模拟盘 Web 控制台
+
+一键启动模拟盘 + Web（默认 `http://127.0.0.1:8787/`，用户 `admin` / 密码见配置）：
+
+```bash
+cp configs/live_console.example.json configs/live_console.json
+# 修改 auth.password，可选填写 wecom.webhook_url
+python3 -m crypto_lab.cli live-console
+```
+
+仅导出历史买卖点：
+
+```bash
+python3 -m crypto_lab.cli trade-book --output reports/trade_book.json
+```
+
+| 模式 | 作用 |
+|---|---|
+| `paper` | 用实盘（或本地缓存）行情在本地模拟成交与盈亏 |
+| `live` | 生成实盘信号与意向单；默认干跑，`allow_live_orders=true` 才允许发单适配 |
+| `backtest` | 只读历史买卖点清单，不进入轮询成交 |
+
+能力：登录保护的 Web 界面（持仓、权益、收益/回撤/夏普、目标权重、成交与买卖点）、
+企业微信群机器人通知、策略注册表（`crypto_lab/live/registry.py`）、状态落盘
+`runtime/live/console.db`。安全默认：`allow_live_orders=false`；即使打开，在未完成
+交易所签名下单联调前仍会拒绝真实发单。
+
+## 报告产物索引
+
+| 文件 | 说明 |
+|---|---|
+| `reports/cross_market_report.md` | 首轮迁移原型样本外结论 |
+| `reports/optimized_strategies_report.md` | 低换手优化策略设计与验证 |
+| `reports/crypto_alpha_report.md` | BTC 门控/轮动/对冲增强 |
+| `reports/core_top5_report.md` | TOP5 激进轮动与做空降级验证 |
+| `reports/cycle_full_report.md` | 2021–2026 全周期与 beta 分段 |
+| `reports/ema_report.md` | EMA 多周期研究 |
+| `reports/cta_report.md` / `cta_adversarial_review.md` | CTA 回测与对抗审查 |
+| `reports/*_results.json` / `data_manifest.json` | 参数、指标与数据清单 |
+
+仓库已包含报告所用 CSV 快照；固定起止日期的 `download` 可重新拉取并核对 SHA-256。
 
 ## 回测约束
 
 - T-1 收盘后生成目标权重，获得 T 日 close-to-close 收益，禁止未来数据；
-- 仅现货多头，未分配资金视为现金，不加杠杆；
+- 多数研究策略仅现货多头，未分配资金视为现金；`core-top5` / CTA 等另有敞口上限；
 - 默认单边手续费 0.10%，滑点 0.05%；
-- 前 60% 样本有限网格选参，后 40% 锁定参数后评价；
-- BTC 现货买入持有为统一基准，按 365 天年化。
+- 前 60% 样本有限网格选参，后 40% 锁定参数后评价（TOP5 用固定训练截止日）；
+- BTC 现货买入持有为统一基准，按 365 天年化；
 - `core-top5` 使用多空引擎，名义总敞口硬上限 1.5 倍、空头上限 0.3 倍；
   回测未模拟强平、保证金阶梯和逐币种实时资金费率。
+
+## Pull / 分支合并状态（截至整理时）
+
+| PR | 分支 | 状态 | 内容 |
+|---|---|---|---|
+| #1 | `cursor/crypto-cross-market-backtest-7e58` | 已合并 | 跨市场回测与 BTC 门控增强 |
+| #2 | `cursor/crypto-cross-market-backtest-7e58` | 已合并 | 2021–2026 全周期详细报告 |
+| #3 | `cursor/core-top5-regime-f4f4` | 已合并 | TOP5 核心池激进牛熊轮动 |
+| #4 | `cursor/live-paper-console-f4f4` | 由本分支承接合并 | 模拟/实盘控制台与 Web 操作台 |
+
+说明：PR #4 曾因 #3 的 squash 合入与 `main` 冲突（重复的 `core_top5*`）。本变更在 `main`
+上干净接入 `crypto_lab/live`、`crypto_lab/web`、`live-console` / `trade-book` CLI，并更新本文档；
+合并后应关闭 #4，并删除已无 ahead 提交的远程特性分支。
 
 ## 重要限制
 
