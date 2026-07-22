@@ -166,6 +166,35 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path("/opt/cursor/artifacts/cta-report"),
     )
+
+    live = subparsers.add_parser(
+        "live-console",
+        help="一键启动模拟/实盘干跑引擎 + 登录保护的 Web 操作台",
+    )
+    live.add_argument(
+        "--config",
+        type=Path,
+        default=Path("configs/live_console.json"),
+        help="控制台 JSON 配置；不存在时自动生成默认模板",
+    )
+    live.add_argument("--host", default=None, help="覆盖配置中的监听地址")
+    live.add_argument("--port", type=int, default=None, help="覆盖配置中的端口")
+    live.add_argument(
+        "--skip-initial-sync",
+        action="store_true",
+        help="启动前不先跑一轮同步（默认会生成买卖点与首屏快照）",
+    )
+
+    trade_book = subparsers.add_parser(
+        "trade-book",
+        help="仅导出指定策略的历史买卖点清单到 JSON",
+    )
+    trade_book.add_argument("--data-dir", type=Path, default=Path("data/okx"))
+    trade_book.add_argument("--output", type=Path, default=Path("reports/trade_book.json"))
+    trade_book.add_argument("--strategy", default="core_top5_regime_rotation")
+    trade_book.add_argument("--deployment-id", default="manual-trade-book")
+    trade_book.add_argument("--fee-rate", type=float, default=0.001)
+    trade_book.add_argument("--slippage-rate", type=float, default=0.0005)
     return parser
 
 
@@ -189,6 +218,10 @@ def main(argv: list[str] | None = None) -> int:
         return _ema_research(args)
     if args.command == "cta-research":
         return _cta_research(args)
+    if args.command == "live-console":
+        return _live_console(args)
+    if args.command == "trade-book":
+        return _trade_book(args)
     raise AssertionError(f"未知命令：{args.command}")
 
 
@@ -469,6 +502,51 @@ def _cta_research(args: argparse.Namespace) -> int:
     for path in chart_paths.values():
         shutil.copy2(path, args.artifact_dir / path.name)
     print(f"CTA 研究完成：{args.output_dir / 'cta_report.md'}")
+    return 0
+
+
+def _live_console(args: argparse.Namespace) -> int:
+    """启动模拟/实盘干跑引擎与带密码登录的 Web 控制台。
+
+    默认写入/读取 ``configs/live_console.json``。企业微信、登录密码、部署列表
+    均可在该文件中修改；实盘真实发单默认关闭。
+    """
+
+    from .web.service import run_live_console
+
+    run_live_console(
+        config_path=args.config,
+        host=args.host,
+        port=args.port,
+        run_once_before_serve=not args.skip_initial_sync,
+    )
+    return 0
+
+
+def _trade_book(args: argparse.Namespace) -> int:
+    """导出历史买卖点清单，便于离线核对或接入外部系统。"""
+
+    from .live.registry import strategy_catalog
+    from .live.trade_points import build_backtest_trade_points, summarize_trade_points
+
+    if args.strategy not in strategy_catalog():
+        raise ValueError(f"未知策略：{args.strategy}")
+    points = build_backtest_trade_points(
+        deployment_id=args.deployment_id,
+        strategy_key=args.strategy,
+        parameters={},
+        data_dir=args.data_dir,
+        fee_rate=args.fee_rate,
+        slippage_rate=args.slippage_rate,
+    )
+    payload = {
+        "strategy": args.strategy,
+        "deployment_id": args.deployment_id,
+        "summary": summarize_trade_points([point.to_dict() for point in points]),
+        "points": [point.to_dict() for point in points],
+    }
+    write_json(args.output, payload)
+    print(f"买卖点清单已写出：{args.output}（{len(points)} 条）")
     return 0
 
 
