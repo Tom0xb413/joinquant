@@ -1,0 +1,38 @@
+services:
+  live-console:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: joinquant-live-console:latest
+    container_name: joinquant-live-console
+    ports:
+      - "${LIVE_CONSOLE_PUBLISH_PORT:-8787}:8787"
+    environment:
+      LIVE_CONSOLE_HOST: "0.0.0.0"
+      LIVE_CONSOLE_PORT: "8787"
+      LIVE_DATA_DIR: /app/data/okx
+      LIVE_RUNTIME_DIR: /app/runtime/live
+      LIVE_AUTH_USERNAME: "${LIVE_AUTH_USERNAME:-admin}"
+      LIVE_AUTH_PASSWORD: "${LIVE_AUTH_PASSWORD:-change-me-now}"
+      LIVE_SESSION_SECRET: "${LIVE_SESSION_SECRET:-}"
+      WECOM_ENABLED: "${WECOM_ENABLED:-false}"
+      WECOM_WEBHOOK_URL: "${WECOM_WEBHOOK_URL:-}"
+      ALLOW_LIVE_ORDERS: "${ALLOW_LIVE_ORDERS:-false}"
+      REFRESH_MARKET: "${REFRESH_MARKET:-false}"
+    volumes:
+      # 持久化模拟盘持仓、成交与买卖点 SQLite
+      - live-runtime:/app/runtime
+      # 可选：挂载自定义配置（只读）；不挂载则用镜像内 docker 默认配置
+      # - ./configs/live_console.json:/app/configs/live_console.json:ro
+      # 可选：挂载更新后的日线缓存
+      # - ./data/okx:/app/data/okx:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8787/login"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
+
+volumes:
+  live-runtime:

@@ -5,3 +5,4 @@ __pycache__/
 runtime/
 configs/live_console.json
 joinquant_crypto_lab.egg-info/
+.env

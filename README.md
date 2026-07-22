@@ -10,8 +10,11 @@ joinquant/
 ├── README.txt              # 原始 Top12 策略包说明
 ├── AGENTS.md               # Cursor Cloud 开发环境约定
 ├── pyproject.toml          # 包元数据与依赖（numpy / matplotlib / flask）
+├── Dockerfile / docker-compose.yml / .env.example
+├── docker/entrypoint.sh    # 容器入口：种子配置并启动 live-console
 ├── configs/
-│   └── live_console.example.json   # 模拟/实盘控制台示例配置
+│   ├── live_console.example.json   # 本地示例配置
+│   └── live_console.docker.json    # 容器默认配置（0.0.0.0）
 ├── crypto_lab/             # 可运行研究与部署代码
 │   ├── cli.py              # 统一 CLI 入口
 │   ├── data.py / indicators.py / backtest.py / long_short.py
@@ -25,7 +28,7 @@ joinquant/
 │   ├── live/               # paper / live / backtest 运行时
 │   └── web/                # 登录保护的 Web 操作台
 ├── data/
-│   ├── okx/                # 日线快照（首轮/优化/alpha/TOP5）
+│   ├── okx/                # 日线快照（首轮/优化/alpha/TOP5；已打入镜像）
 │   ├── okx_bars/           # EMA 多周期 K 线
 │   └── okx_cta/            # CTA 多周期 K 线
 ├── reports/                # 研究产出（markdown / json / png）
@@ -141,6 +144,44 @@ python3 -m crypto_lab.cli trade-book --output reports/trade_book.json
 企业微信群机器人通知、策略注册表（`crypto_lab/live/registry.py`）、状态落盘
 `runtime/live/console.db`。安全默认：`allow_live_orders=false`；即使打开，在未完成
 交易所签名下单联调前仍会拒绝真实发单。
+
+## Docker 一键部署
+
+镜像打包：`crypto_lab` 策略代码、Web 控制台（waitress WSGI）、注册表内策略（TOP5 轮动 /
+BTC 门控动量）、以及 `data/okx` 日线快照。容器默认监听 `0.0.0.0:8787`，状态写入卷
+`live-runtime`。
+
+```bash
+cp .env.example .env
+# 务必修改 LIVE_AUTH_PASSWORD；可选填写 WECOM_WEBHOOK_URL
+docker compose up -d --build
+# 浏览器打开 http://127.0.0.1:8787/  （用户 admin / 密码见 .env）
+docker compose logs -f live-console
+docker compose down
+```
+
+仅构建镜像：
+
+```bash
+docker build -t joinquant-live-console:latest .
+docker run --rm -p 8787:8787 \
+  -e LIVE_AUTH_PASSWORD='your-strong-password' \
+  -v joinquant-live-runtime:/app/runtime \
+  joinquant-live-console:latest
+```
+
+常用环境变量：
+
+| 变量 | 作用 |
+|---|---|
+| `LIVE_AUTH_USERNAME` / `LIVE_AUTH_PASSWORD` | Web 登录账号 |
+| `LIVE_SESSION_SECRET` | Flask 会话密钥（建议固定，避免重启掉登录态） |
+| `WECOM_WEBHOOK_URL` | 企业微信群机器人；非空则自动启用通知 |
+| `REFRESH_MARKET` | `true` 时启动轮询会尝试刷新 OKX 公开日线 |
+| `ALLOW_LIVE_ORDERS` | 默认 `false`；未完成交易所签名联调前请勿打开 |
+| `LIVE_CONSOLE_PUBLISH_PORT` | compose 宿主机映射端口，默认 8787 |
+
+容器内也可执行 `docker compose run --rm live-console trade-book --output /tmp/book.json`。
 
 ## 报告产物索引
 
