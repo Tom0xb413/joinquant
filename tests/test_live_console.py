@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import unittest.mock
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -11,7 +12,12 @@ import numpy as np
 
 from crypto_lab.data import Candle, MarketData, save_candles
 from crypto_lab.live.broker import PaperBroker, PortfolioState, performance_metrics
-from crypto_lab.live.config import default_live_config, load_live_config, save_live_config
+from crypto_lab.live.config import (
+    apply_env_overrides,
+    default_live_config,
+    load_live_config,
+    save_live_config,
+)
 from crypto_lab.live.models import Fill
 from crypto_lab.live.notifier import WeComNotifier
 from crypto_lab.live.registry import build_strategy, strategy_catalog
@@ -245,6 +251,39 @@ class LiveConsoleWebTests(unittest.TestCase):
         loaded = load_live_config(path)
         self.assertEqual(loaded.auth.username, "admin")
         self.assertGreaterEqual(len(loaded.deployments), 1)
+
+    def test_apply_env_overrides(self):
+        """环境变量应覆盖认证、监听地址与企业微信开关。"""
+
+        config = default_live_config()
+        with unittest.mock.patch.dict(
+            "os.environ",
+            {
+                "LIVE_CONSOLE_HOST": "0.0.0.0",
+                "LIVE_CONSOLE_PORT": "9001",
+                "LIVE_AUTH_USERNAME": "ops",
+                "LIVE_AUTH_PASSWORD": "s3cret",
+                "LIVE_SESSION_SECRET": "fixed-secret",
+                "WECOM_WEBHOOK_URL": "https://example.invalid/hook",
+                "ALLOW_LIVE_ORDERS": "false",
+                "REFRESH_MARKET": "1",
+                "LIVE_DATA_DIR": "/tmp/okx",
+                "LIVE_RUNTIME_DIR": "/tmp/runtime",
+            },
+            clear=False,
+        ):
+            apply_env_overrides(config)
+        self.assertEqual(config.host, "0.0.0.0")
+        self.assertEqual(config.port, 9001)
+        self.assertEqual(config.auth.username, "ops")
+        self.assertEqual(config.auth.password, "s3cret")
+        self.assertEqual(config.auth.session_secret, "fixed-secret")
+        self.assertTrue(config.wecom.enabled)
+        self.assertEqual(config.wecom.webhook_url, "https://example.invalid/hook")
+        self.assertFalse(config.allow_live_orders)
+        self.assertTrue(config.refresh_market)
+        self.assertEqual(config.data_dir, "/tmp/okx")
+        self.assertEqual(config.runtime_dir, "/tmp/runtime")
 
 
 if __name__ == "__main__":

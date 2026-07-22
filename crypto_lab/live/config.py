@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import secrets
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -179,6 +180,68 @@ def save_live_config(path: Path, config: LiveConsoleConfig) -> None:
         json.dumps(asdict(config), ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+
+
+def apply_env_overrides(config: LiveConsoleConfig) -> LiveConsoleConfig:
+    """用环境变量覆盖部署敏感项与容器网络绑定。
+
+    Docker / K8s 常用密钥注入方式是环境变量；本函数只改动显式提供的键，
+    避免空字符串误清空配置。布尔值接受 ``1/true/yes/on``（大小写不敏感）。
+
+    支持的变量：
+    - ``LIVE_CONSOLE_HOST`` / ``LIVE_CONSOLE_PORT``
+    - ``LIVE_AUTH_USERNAME`` / ``LIVE_AUTH_PASSWORD`` / ``LIVE_SESSION_SECRET``
+    - ``WECOM_ENABLED`` / ``WECOM_WEBHOOK_URL`` / ``WECOM_MENTION_ALL``
+    - ``ALLOW_LIVE_ORDERS`` / ``REFRESH_MARKET``
+    - ``LIVE_DATA_DIR`` / ``LIVE_RUNTIME_DIR``
+
+    @author Cursor
+    @since 0.3.1
+    """
+
+    host = os.environ.get("LIVE_CONSOLE_HOST")
+    if host:
+        config.host = host
+    port_raw = os.environ.get("LIVE_CONSOLE_PORT")
+    if port_raw:
+        config.port = int(port_raw)
+    username = os.environ.get("LIVE_AUTH_USERNAME")
+    if username:
+        config.auth.username = username
+    password = os.environ.get("LIVE_AUTH_PASSWORD")
+    if password:
+        config.auth.password = password
+    session_secret = os.environ.get("LIVE_SESSION_SECRET")
+    if session_secret:
+        config.auth.session_secret = session_secret
+    if "WECOM_ENABLED" in os.environ:
+        config.wecom.enabled = _env_bool("WECOM_ENABLED")
+    webhook = os.environ.get("WECOM_WEBHOOK_URL")
+    if webhook:
+        config.wecom.webhook_url = webhook
+        config.wecom.enabled = True
+    if "WECOM_MENTION_ALL" in os.environ:
+        config.wecom.mention_all = _env_bool("WECOM_MENTION_ALL")
+    if "ALLOW_LIVE_ORDERS" in os.environ:
+        config.allow_live_orders = _env_bool("ALLOW_LIVE_ORDERS")
+    if "REFRESH_MARKET" in os.environ:
+        config.refresh_market = _env_bool("REFRESH_MARKET")
+    data_dir = os.environ.get("LIVE_DATA_DIR")
+    if data_dir:
+        config.data_dir = data_dir
+    runtime_dir = os.environ.get("LIVE_RUNTIME_DIR")
+    if runtime_dir:
+        config.runtime_dir = runtime_dir
+    return config
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    """解析常见真值字符串；缺失时返回 default。"""
+
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _from_dict(payload: dict[str, Any]) -> LiveConsoleConfig:

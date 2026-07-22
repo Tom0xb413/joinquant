@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..live.config import LiveConsoleConfig, load_live_config, save_live_config
+from ..live.config import (
+    apply_env_overrides,
+    load_live_config,
+    save_live_config,
+)
 from ..live.engine import TradingEngine
 from . import create_app
 
@@ -18,7 +22,10 @@ def run_live_console(
     """加载配置、启动交易引擎并打开 Web 控制台。
 
     首次运行若配置不存在会自动写出默认模板。默认先同步一轮（生成
-    backtest 买卖点与 paper 首屏快照），再阻塞服务 HTTP。
+    backtest 买卖点与 paper 首屏快照），再阻塞服务 HTTP。CLI 的
+    ``host`` / ``port`` 优先于配置文件；环境变量（Docker 密钥注入）
+    再覆盖认证与通知等敏感项。配置目录只读时跳过落盘，仅使用内存配置。
+    优先使用 waitress 作为生产 WSGI；缺失时回退 Flask 内置服务器。
 
     @author Cursor
     @since 0.3.0
@@ -30,7 +37,11 @@ def run_live_console(
         config.host = host
     if port:
         config.port = port
-    save_live_config(path, config)
+    apply_env_overrides(config)
+    try:
+        save_live_config(path, config)
+    except OSError as exc:
+        print(f"[warn] config not writable ({exc}); using in-memory overrides")
 
     engine = TradingEngine(config)
     if run_once_before_serve:
@@ -42,6 +53,16 @@ def run_live_console(
         f"(user={config.auth.username})"
     )
     try:
-        app.run(host=config.host, port=config.port, debug=False, use_reloader=False)
+        try:
+            from waitress import serve
+        except ImportError:
+            app.run(
+                host=config.host,
+                port=config.port,
+                debug=False,
+                use_reloader=False,
+            )
+        else:
+            serve(app, host=config.host, port=config.port, threads=8)
     finally:
         engine.stop()
